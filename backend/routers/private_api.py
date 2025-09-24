@@ -2,7 +2,7 @@ import os
 from fastapi import APIRouter
 from dotenv import load_dotenv
 from binance.client import Client as BinanceClient
-from bitget.rest import Client as BitgetClient
+from pybitget import Client as BitgetClient
 
 load_dotenv()
 router = APIRouter()
