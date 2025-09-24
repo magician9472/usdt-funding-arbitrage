@@ -4,8 +4,8 @@ from fastapi.templating import Jinja2Templates
 import os
 
 router = APIRouter()
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # backend/
+TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")  # backend/templates
 
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
