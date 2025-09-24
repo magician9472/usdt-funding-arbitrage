@@ -74,3 +74,25 @@ th {
   font-weight: bold;
   box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
+
+/* 네비게이션 바 */
+nav {
+  display: flex;
+  gap: 20px;
+  background: #fff;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+nav a {
+  color: #0077ff;
+  font-weight: bold;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+nav a:hover {
+  text-decoration: underline;
+}
