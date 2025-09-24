@@ -10,9 +10,11 @@ app = FastAPI()
 
 # 정적 파일
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "..", "static")
+STATIC_DIR = os.path.join(BASE_DIR, "static")  # backend/static
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+if os.path.isdir(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 # 라우터 등록
