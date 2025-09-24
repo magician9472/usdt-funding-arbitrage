@@ -143,17 +143,23 @@ async def bitget_order(req: OrderRequest):
         # marginMode 검증
         margin_mode = req.get_margin_mode()
 
-        # 레버리지/마진 모드 설정
+        # 현재 계정 설정 조회 → marginMode가 다를 때만 변경
+        account_info = bitget_client.mix_get_account(symbol=req.symbol, marginCoin="USDT")
+        current_mode = account_info["data"]["marginMode"].lower()
+
+        if current_mode != margin_mode:
+            bitget_client.mix_adjust_margintype(
+                symbol=req.symbol,
+                marginCoin="USDT",
+                marginMode=margin_mode
+            )
+
+        # 레버리지 설정 (이건 항상 가능)
         bitget_client.mix_adjust_leverage(
             symbol=req.symbol,
             marginCoin="USDT",
             leverage=str(req.leverage),
             holdSide="long" if "long" in req.side else "short"
-        )
-        bitget_client.mix_adjust_margintype(
-            symbol=req.symbol,
-            marginCoin="USDT",
-            marginMode=margin_mode
         )
 
         # 주문 생성
