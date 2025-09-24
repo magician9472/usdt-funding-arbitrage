@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 import os, sys
 from dotenv import load_dotenv
 
-# .env 불러오기
+# # .env 불러오기
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")

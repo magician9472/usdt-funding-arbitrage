@@ -8,25 +8,25 @@ from database import Base
 import os
 from dotenv import load_dotenv
 
-# .env 불러오기
+# .env 불러오기 (Railway에서는 무시되고 Variables 값이 들어옴)
 load_dotenv()
 
+# Alembic Config 객체
 config = context.config
 
-# alembic.ini 대신 .env에서 불러오기
-database_url = os.getenv("DATABASE_URL")
+# .env 또는 Railway Variables 에서 DB URL 가져오기
+database_url = os.getenv("DATABASE_URL_SYNC") or os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
-
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
-config = context.config
-
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# 로깅 설정
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# 여기서 모델 import 해서 target_metadata 연결
+# 예: from backend.models import Base
+# target_metadata = Base.metadata
+
 
 # add your model's MetaData object here
 # for 'autogenerate' support
