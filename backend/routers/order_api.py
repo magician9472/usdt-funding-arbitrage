@@ -150,24 +150,7 @@ async def bitget_order(req: OrderRequest):
         if margin_mode not in ["crossed", "isolated"]:
             return {"status": "error", "message": f"marginMode는 cross/crossed 또는 isolated만 가능합니다. (입력값: {req.marginMode})"}
 
-        # 현재 계정 marginMode 확인
-        account_info = bitget_client.mix_get_account(symbol=req.symbol, marginCoin="USDT")
-        current_mode = account_info["data"]["marginMode"].lower()
 
-        # marginMode가 다를 때만 변경 시도
-        if current_mode != margin_mode:
-            # 포지션이 있는지 확인
-            positions = bitget_client.mix_get_positions(productType="umcbl", symbol=req.symbol)
-            has_position = any(float(p.get("total", 0)) > 0 for p in positions.get("data", []))
-
-            if not has_position:
-                bitget_client.mix_adjust_margintype(
-                    symbol=req.symbol,
-                    marginCoin="USDT",
-                    marginMode=margin_mode
-                )
-            else:
-                logger.warning(f"[BITGET] {req.symbol} 포지션이 있어 marginMode 변경 불가 (현재:{current_mode}, 요청:{margin_mode})")
 
         # 레버리지 설정 (이건 포지션 있어도 가능)
         bitget_client.mix_adjust_leverage(
