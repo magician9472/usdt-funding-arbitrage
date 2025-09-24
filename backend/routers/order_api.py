@@ -120,7 +120,7 @@ async def bitget_order(req: OrderRequest):
         current_price = float(ticker["data"]["markPrice"])
 
         # 심볼 정보 조회 (minTradeNum, pricePlace, quantityPlace)
-        symbols_info = bitget_client.mix_get_symbols(productType="umcbl")  # USDT-M 선물
+        symbols_info = bitget_client.mix_get_contracts(productType="umcbl")  # USDT-M 선물
         symbol_info = next(s for s in symbols_info["data"] if s["symbol"] == req.symbol)
 
         min_trade_num = float(symbol_info["minTradeNum"])   # 최소 주문 수량
