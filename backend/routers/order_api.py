@@ -1,3 +1,4 @@
+# routers/order_api.py
 from fastapi import APIRouter
 from binance.client import Client as BinanceClient
 from pybitget import Client as BitgetClient
@@ -35,28 +36,22 @@ class OrderRequest(BaseModel):
     usdAmount: float
     price: Optional[float] = None
     leverage: int = 10
-    marginMode: str = "isolated"   # 기본값
+    marginMode: str = "cross"
     stopLoss: Optional[float] = None
 
 
-    # 유효성 검증
-    def get_margin_mode(self):
-        mode = self.marginMode.lower()
-        if mode not in ["isolated", "crossed"]:
-            raise ValueError(f"marginMode는 isolated 또는 crossed만 가능합니다. (입력값: {self.marginMode})")
-        return mode
+def adjust_to_step(value: float, step: float) -> float:
+    """주어진 stepSize에 맞게 수량/가격을 내림 조정"""
+    return (value // step) * step
 
-
-# -------------------------
-# Binance 주문
-# -------------------------
 @router.post("/binance/order")
 async def binance_order(req: OrderRequest):
     try:
+        # 현재가 조회
         ticker = binance_client.futures_symbol_ticker(symbol=req.symbol)
         current_price = float(ticker["price"])
 
-        # 심볼 정보 조회
+        # 심볼 정보 조회 (stepSize, tickSize, minNotional)
         info = binance_client.futures_exchange_info()
         symbol_info = next(s for s in info["symbols"] if s["symbol"] == req.symbol)
 
@@ -69,10 +64,11 @@ async def binance_order(req: OrderRequest):
         notional_filter = next(f for f in symbol_info["filters"] if f["filterType"] == "MIN_NOTIONAL")
         min_notional = float(notional_filter["notional"])
 
-        # 수량 계산
+        # 수량 계산 (usdAmount / 현재가 → stepSize 맞추기)
         raw_qty = req.usdAmount / current_price
         quantity = adjust_to_step(raw_qty, step_size)
 
+        # 최소 주문 금액 체크
         if quantity * current_price < min_notional:
             return {"status": "error", "message": f"주문 금액이 최소 요구치({min_notional} USDT) 미만입니다."}
 
@@ -95,7 +91,7 @@ async def binance_order(req: OrderRequest):
                 symbol=req.symbol, side=req.side, type="MARKET", quantity=quantity
             )
 
-        # 스탑로스
+        # 스탑로스 주문
         stop_order = None
         if req.stopLoss:
             stop_price = adjust_to_step(req.stopLoss, tick_size)
@@ -115,80 +111,45 @@ async def binance_order(req: OrderRequest):
         return {"status": "error", "message": str(e)}
 
 
-# -------------------------
 # Bitget 주문
-# -------------------------
 @router.post("/bitget/order")
 async def bitget_order(req: OrderRequest):
     try:
         ticker = bitget_client.mix_get_market_price(symbol=req.symbol)
         current_price = float(ticker["data"]["markPrice"])
+        size = str(round(req.usdAmount / current_price, 4))
 
-        # 심볼 정보 조회
-        symbols_info = bitget_client.mix_get_symbols_info("umcbl")
-        symbol_info = next(s for s in symbols_info["data"] if s["symbol"] == req.symbol)
-
-        # 안전하게 필드 조회
-        min_trade_num = float(symbol_info.get("minTradeNum", 0))
-        price_place = int(symbol_info.get("pricePlace", 4))
-        quantity_place = int(symbol_info.get("quantityPlace") or symbol_info.get("volumePlace", 0))
-
-        # 수량 계산
-        raw_size = req.usdAmount / current_price
-        size = round(raw_size, quantity_place)
-
-        if size < min_trade_num:
-            return {"status": "error", "message": f"주문 수량이 최소 요구치({min_trade_num}) 미만입니다."}
-
-        # marginMode 검증
-        margin_mode = req.get_margin_mode()
-
-        # 현재 계정 설정 조회 → marginMode가 다를 때만 변경
-        account_info = bitget_client.mix_get_account(symbol=req.symbol, marginCoin="USDT")
-        current_mode = account_info["data"]["marginMode"].lower()
-
-        if current_mode != margin_mode:
-            bitget_client.mix_adjust_margintype(
-                symbol=req.symbol,
-                marginCoin="USDT",
-                marginMode=margin_mode
-            )
-
-        # 레버리지 설정 (이건 항상 가능)
-        bitget_client.mix_adjust_leverage(
-            symbol=req.symbol,
-            marginCoin="USDT",
+        bitget_client.mix_set_leverage(
+            symbol=req.symbol, marginCoin="USDT",
             leverage=str(req.leverage),
             holdSide="long" if "long" in req.side else "short"
         )
+        bitget_client.mix_set_margin_mode(
+            symbol=req.symbol, marginCoin="USDT", marginMode=req.marginMode.upper()
+        )
 
-        # 주문 생성
         if req.price:
-            price = round(req.price, price_place)
             order = bitget_client.mix_place_order(
                 symbol=req.symbol, marginCoin="USDT",
-                size=str(size), side=req.side, orderType="limit", price=str(price)
+                size=size, side=req.side, orderType="limit", price=str(req.price)
             )
         else:
             order = bitget_client.mix_place_order(
                 symbol=req.symbol, marginCoin="USDT",
-                size=str(size), side=req.side, orderType="market"
+                size=size, side=req.side, orderType="market"
             )
 
-        # 스탑로스
         stop_order = None
         if req.stopLoss:
-            stop_price = round(req.stopLoss, price_place)
             stop_order = bitget_client.mix_place_plan_order(
-                symbol=req.symbol, marginCoin="USDT", size=str(size),
+                symbol=req.symbol, marginCoin="USDT", size=size,
                 side="close_long" if req.side == "open_long" else "close_short",
-                orderType="market", triggerPrice=str(stop_price),
+                orderType="market", triggerPrice=str(req.stopLoss),
                 triggerType="fill_price"
             )
 
-        logger.info(f"[BITGET] 주문 성공: {req.symbol} {req.side} {size}개 ≈ {req.usdAmount}USDT → {order}")
+        logger.info(f"[BITGET] 주문 성공: {req.symbol} {req.side} {req.usdAmount}USDT → {order}")
         return {"status": "success", "order": order, "stopLoss": stop_order}
-
     except Exception as e:
         logger.error(f"[BITGET] 주문 실패: {req.symbol} {req.side} {req.usdAmount}USDT → {e}")
         return {"status": "error", "message": str(e)}
