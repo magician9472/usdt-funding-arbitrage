@@ -3,7 +3,7 @@ import asyncio
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from routers import api, views, private_api, order_api
+from backend.routers import api, views, private_api, order_api
 from update_task import update_loop
 
 app = FastAPI()
