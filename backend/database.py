@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os, sys
+import logging
 from dotenv import load_dotenv
 
 # # .env 불러오기
@@ -18,6 +19,9 @@ elif DATABASE_URL.startswith("postgresql://"):
 
 engine = create_async_engine(DATABASE_URL, echo=True, future=True)
 
+# SQLAlchemy 엔진 로그 레벨 낮추기
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
 SessionLocal = sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -34,3 +38,5 @@ async def get_db():
             yield session
         finally:
             await session.close()
+
+

@@ -5,6 +5,11 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from backend.routers import api, views, private_api, order_api
 from backend.update_task import update_loop
+import logging
+
+
+# FastAPI 전체 로그 레벨 조정
+logging.basicConfig(level=logging.WARNING)
 
 app = FastAPI()
 
