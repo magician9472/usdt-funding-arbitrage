@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from models import FundingRate
+from backend.models import FundingRate
 from database import get_db
 
 router = APIRouter()
