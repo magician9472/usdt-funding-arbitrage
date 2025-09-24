@@ -35,13 +35,16 @@ class OrderRequest(BaseModel):
     usdAmount: float
     price: Optional[float] = None
     leverage: int = 10
-    marginMode: str = "isolated"
+    marginMode: str = "isolated"   # 기본값
     stopLoss: Optional[float] = None
 
 
-def adjust_to_step(value: float, step: float) -> float:
-    """주어진 stepSize에 맞게 수량/가격을 내림 조정"""
-    return (value // step) * step
+    # 유효성 검증
+    def get_margin_mode(self):
+        mode = self.marginMode.lower()
+        if mode not in ["isolated", "crossed"]:
+            raise ValueError(f"marginMode는 isolated 또는 crossed만 가능합니다. (입력값: {self.marginMode})")
+        return mode
 
 
 # -------------------------
@@ -121,7 +124,7 @@ async def bitget_order(req: OrderRequest):
         ticker = bitget_client.mix_get_market_price(symbol=req.symbol)
         current_price = float(ticker["data"]["markPrice"])
 
-        # 심볼 정보 조회 (mix_get_symbols_info 사용)
+        # 심볼 정보 조회
         symbols_info = bitget_client.mix_get_symbols_info("umcbl")
         symbol_info = next(s for s in symbols_info["data"] if s["symbol"] == req.symbol)
 
@@ -137,6 +140,9 @@ async def bitget_order(req: OrderRequest):
         if size < min_trade_num:
             return {"status": "error", "message": f"주문 수량이 최소 요구치({min_trade_num}) 미만입니다."}
 
+        # marginMode 검증
+        margin_mode = req.get_margin_mode()
+
         # 레버리지/마진 모드 설정
         bitget_client.mix_adjust_leverage(
             symbol=req.symbol,
@@ -147,7 +153,7 @@ async def bitget_order(req: OrderRequest):
         bitget_client.mix_adjust_margintype(
             symbol=req.symbol,
             marginCoin="USDT",
-            marginMode=req.marginMode.lower()  # "crossed" 또는 "isolated"
+            marginMode=margin_mode
         )
 
         # 주문 생성
