@@ -11,6 +11,15 @@ import logging
 # FastAPI 전체 로그 레벨 조정
 logging.basicConfig(level=logging.WARNING)
 
+# SQLAlchemy 관련
+logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+
+# HTTP 클라이언트 관련
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 app = FastAPI()
 
 # 정적 파일
