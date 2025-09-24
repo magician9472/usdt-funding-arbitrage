@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Funding Rate GAP</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <h1>📊 Binance vs Bitget Funding Rate GAP</h1>
+
+  <!-- 상태 카드 -->
+  <div id="statusCards">
+    <div class="card" id="lastUpdate">마지막 업데이트: -</div>
+    <div class="card" id="nextUpdate">다음 업데이트까지: -</div>
+  </div>
+
+  <div id="status">⏳ 데이터 불러오는 중...</div>
+
+  <table id="fundingTable" style="display:none;">
+    <thead>
+      <tr>
+        <th id="thSymbol">심볼</th>
+        <th id="thBinance">Binance</th>
+        <th id="thBitget">Bitget</th>
+        <th id="thGap">GAP</th>
+        <th>다음 펀딩까지</th>
+      </tr>
+    </thead>
+    <tbody id="fundingBody"></tbody>
+  </table>
+
+  <script src="/static/js/gap.js"></script>
+</body>
+</html>

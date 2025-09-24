@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>계정 잔고 조회</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <h1>📊 계정 잔고 & 포지션 조회</h1>
+  <button onclick="fetchAccount('binance')">Binance</button>
+  <button onclick="fetchAccount('bitget')">Bitget</button>
+
+  <!-- 잔고 테이블 -->
+  <h2>💰 잔고</h2>
+  <table id="balanceTable" style="display:none;">
+    <thead>
+      <tr id="balanceHeader"></tr>
+    </thead>
+    <tbody id="balanceBody"></tbody>
+  </table>
+
+  <script>
+    async function fetchAccount(exchange) {
+      try {
+        const res = await fetch(`/api/${exchange}/account`);
+        if (!res.ok) throw new Error("API 호출 실패");
+        const data = await res.json();
+
+        // 잔고 테이블
+        const bHead = document.getElementById("balanceHeader");
+        const bBody = document.getElementById("balanceBody");
+        bHead.innerHTML = "";
+        bBody.innerHTML = "";
+
+        if (data.assets && Array.isArray(data.assets)) {
+          bHead.innerHTML = "<th>자산</th><th>지갑 잔고</th><th>사용 가능</th>";
+          data.assets.forEach(a => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${a.asset}</td>
+              <td>${a.walletBalance}</td>
+              <td>${a.availableBalance}</td>
+            `;
+            bBody.appendChild(tr);
+          });
+          document.getElementById("balanceTable").style.display = "table";
+        } else {
+          document.getElementById("balanceTable").style.display = "none";
+        }
+
+
+      } catch (err) {
+        alert("❌ 데이터 불러오기 실패: " + err.message);
+      }
+    }
+  </script>
+</body>
+</html>

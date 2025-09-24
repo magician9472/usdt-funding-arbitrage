@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>매수/매도 주문</title>
+  <link rel="stylesheet" href="/static/css/order.css">
+</head>
+<body>
+  <h1>🛒 매수/매도 주문</h1>
+
+  <div class="order-box">
+    <h2>주문 입력</h2>
+
+    <label>거래소
+      <select id="exchange">
+        <option value="binance">Binance</option>
+        <option value="bitget">Bitget</option>
+      </select>
+    </label>
+
+    <label>마진 모드
+      <select id="marginMode">
+        <option value="isolated">Isolated</option>
+        <option value="cross">Cross</option>
+      </select>
+    </label>
+
+    <label>레버리지
+      <input id="leverage" type="number" value="10" min="1">
+    </label>
+
+    <label>심볼
+      <input id="symbol" placeholder="예: BTCUSDT / BTCUSDT_UMCBL">
+    </label>
+
+    <label>금액 (USDT 기준)
+      <input id="usdAmount" type="number" placeholder="예: 100" min="1">
+    </label>
+
+    <label>가격 (시장가면 비워두기)
+      <input id="price" type="number" placeholder="예: 25000" min="0">
+    </label>
+
+    <label>손절가 (Stop-Loss)
+      <input id="stopLoss" type="number" placeholder="예: 24000" min="0">
+    </label>
+
+    <div class="btns">
+      <button class="btn-buy" onclick="placeOrder('BUY')">매수</button>
+      <button class="btn-sell" onclick="placeOrder('SELL')">매도</button>
+    </div>
+  </div>
+
+  <div id="result">결과가 여기에 표시됩니다.</div>
+
+  <script src="/static/js/order.js"></script>
+</body>
+</html>

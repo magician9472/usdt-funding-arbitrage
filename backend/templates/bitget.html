@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Bitget Funding Rates</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <h1>📊 Bitget Funding Rates</h1>
+  <div id="status">⏳ 데이터 불러오는 중...</div>
+  <table id="fundingTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>심볼</th>
+        <th>펀딩레이트</th>
+        <th>다음 펀딩 시간</th>
+      </tr>
+    </thead>
+    <tbody id="fundingBody"></tbody>
+  </table>
+  <script src="/static/js/bitget.js"></script>
+</body>
+</html>
