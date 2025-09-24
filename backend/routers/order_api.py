@@ -1,4 +1,3 @@
-# routers/order_api.py
 from fastapi import APIRouter
 from binance.client import Client as BinanceClient
 from pybitget import Client as BitgetClient
@@ -44,14 +43,17 @@ def adjust_to_step(value: float, step: float) -> float:
     """주어진 stepSize에 맞게 수량/가격을 내림 조정"""
     return (value // step) * step
 
+
+# -------------------------
+# Binance 주문
+# -------------------------
 @router.post("/binance/order")
 async def binance_order(req: OrderRequest):
     try:
-        # 현재가 조회
         ticker = binance_client.futures_symbol_ticker(symbol=req.symbol)
         current_price = float(ticker["price"])
 
-        # 심볼 정보 조회 (stepSize, tickSize, minNotional)
+        # 심볼 정보 조회
         info = binance_client.futures_exchange_info()
         symbol_info = next(s for s in info["symbols"] if s["symbol"] == req.symbol)
 
@@ -64,11 +66,10 @@ async def binance_order(req: OrderRequest):
         notional_filter = next(f for f in symbol_info["filters"] if f["filterType"] == "MIN_NOTIONAL")
         min_notional = float(notional_filter["notional"])
 
-        # 수량 계산 (usdAmount / 현재가 → stepSize 맞추기)
+        # 수량 계산
         raw_qty = req.usdAmount / current_price
         quantity = adjust_to_step(raw_qty, step_size)
 
-        # 최소 주문 금액 체크
         if quantity * current_price < min_notional:
             return {"status": "error", "message": f"주문 금액이 최소 요구치({min_notional} USDT) 미만입니다."}
 
@@ -91,7 +92,7 @@ async def binance_order(req: OrderRequest):
                 symbol=req.symbol, side=req.side, type="MARKET", quantity=quantity
             )
 
-        # 스탑로스 주문
+        # 스탑로스
         stop_order = None
         if req.stopLoss:
             stop_price = adjust_to_step(req.stopLoss, tick_size)
@@ -111,27 +112,27 @@ async def binance_order(req: OrderRequest):
         return {"status": "error", "message": str(e)}
 
 
+# -------------------------
 # Bitget 주문
+# -------------------------
 @router.post("/bitget/order")
 async def bitget_order(req: OrderRequest):
     try:
-        # 현재가 조회
         ticker = bitget_client.mix_get_market_price(symbol=req.symbol)
         current_price = float(ticker["data"]["markPrice"])
 
-        # 심볼 정보 조회 (minTradeNum, pricePlace, quantityPlace)
-        symbols_info = bitget_client.mix_get_contracts(productType="umcbl")  # USDT-M 선물
+        # 심볼 정보 조회 (mix_get_symbols_info 사용)
+        symbols_info = bitget_client.mix_get_symbols_info("umcbl")
         symbol_info = next(s for s in symbols_info["data"] if s["symbol"] == req.symbol)
 
-        min_trade_num = float(symbol_info["minTradeNum"])   # 최소 주문 수량
-        price_place = int(symbol_info["pricePlace"])        # 가격 소수점 자리수
-        quantity_place = int(symbol_info["quantityPlace"])  # 수량 소수점 자리수
+        min_trade_num = float(symbol_info["minTradeNum"])
+        price_place = int(symbol_info["pricePlace"])
+        quantity_place = int(symbol_info["quantityPlace"])
 
-        # 수량 계산 (usdAmount / 현재가 → 자리수 맞추기)
+        # 수량 계산
         raw_size = req.usdAmount / current_price
         size = round(raw_size, quantity_place)
 
-        # 최소 주문 수량 체크
         if size < min_trade_num:
             return {"status": "error", "message": f"주문 수량이 최소 요구치({min_trade_num}) 미만입니다."}
 
@@ -161,7 +162,7 @@ async def bitget_order(req: OrderRequest):
                 size=str(size), side=req.side, orderType="market"
             )
 
-        # 스탑로스 주문
+        # 스탑로스
         stop_order = None
         if req.stopLoss:
             stop_price = round(req.stopLoss, price_place)
