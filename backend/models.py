@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime
-from database import Base
+from backend.database import Base
 
 class FundingRate(Base):
     __tablename__ = "funding_rates"

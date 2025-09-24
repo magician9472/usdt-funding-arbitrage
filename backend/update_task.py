@@ -1,8 +1,8 @@
 import asyncio, httpx
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from database import SessionLocal
-from models import FundingRate
+from backend.database import SessionLocal
+from backend.models import FundingRate
 from sqlalchemy.future import select
 
 # Binance & Bitget API
