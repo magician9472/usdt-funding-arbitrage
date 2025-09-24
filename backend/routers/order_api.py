@@ -40,42 +40,72 @@ class OrderRequest(BaseModel):
     stopLoss: Optional[float] = None
 
 
-# Binance 주문
+def adjust_to_step(value: float, step: float) -> float:
+    """주어진 stepSize에 맞게 수량/가격을 내림 조정"""
+    return (value // step) * step
+
 @router.post("/binance/order")
 async def binance_order(req: OrderRequest):
     try:
+        # 현재가 조회
         ticker = binance_client.futures_symbol_ticker(symbol=req.symbol)
         current_price = float(ticker["price"])
-        quantity = round(req.usdAmount / current_price, 4)
 
+        # 심볼 정보 조회 (stepSize, tickSize, minNotional)
+        info = binance_client.futures_exchange_info()
+        symbol_info = next(s for s in info["symbols"] if s["symbol"] == req.symbol)
+
+        lot_size = next(f for f in symbol_info["filters"] if f["filterType"] == "LOT_SIZE")
+        step_size = float(lot_size["stepSize"])
+
+        price_filter = next(f for f in symbol_info["filters"] if f["filterType"] == "PRICE_FILTER")
+        tick_size = float(price_filter["tickSize"])
+
+        notional_filter = next(f for f in symbol_info["filters"] if f["filterType"] == "MIN_NOTIONAL")
+        min_notional = float(notional_filter["notional"])
+
+        # 수량 계산 (usdAmount / 현재가 → stepSize 맞추기)
+        raw_qty = req.usdAmount / current_price
+        quantity = adjust_to_step(raw_qty, step_size)
+
+        # 최소 주문 금액 체크
+        if quantity * current_price < min_notional:
+            return {"status": "error", "message": f"주문 금액이 최소 요구치({min_notional} USDT) 미만입니다."}
+
+        # 레버리지/마진 모드 설정
         binance_client.futures_change_leverage(symbol=req.symbol, leverage=req.leverage)
         try:
             binance_client.futures_change_margin_type(symbol=req.symbol, marginType=req.marginMode.upper())
         except Exception:
             pass
 
+        # 주문 생성
         if req.price:
+            price = adjust_to_step(req.price, tick_size)
             order = binance_client.futures_create_order(
                 symbol=req.symbol, side=req.side, type="LIMIT",
-                timeInForce="GTC", quantity=quantity, price=req.price
+                timeInForce="GTC", quantity=quantity, price=price
             )
         else:
             order = binance_client.futures_create_order(
                 symbol=req.symbol, side=req.side, type="MARKET", quantity=quantity
             )
 
+        # 스탑로스 주문
         stop_order = None
         if req.stopLoss:
+            stop_price = adjust_to_step(req.stopLoss, tick_size)
             stop_order = binance_client.futures_create_order(
                 symbol=req.symbol,
                 side="SELL" if req.side == "BUY" else "BUY",
                 type="STOP_MARKET",
-                stopPrice=req.stopLoss,
+                stopPrice=stop_price,
                 closePosition=True
             )
 
-        logger.info(f"[BINANCE] 주문 성공: {req.symbol} {req.side} {req.usdAmount}USDT → {order}")
+        logger.info(f"[BINANCE] 주문 성공: {req.symbol} {req.side} {quantity}개 ≈ {req.usdAmount}USDT → {order}")
         return {"status": "success", "order": order, "stopLoss": stop_order}
+
     except Exception as e:
         logger.error(f"[BINANCE] 주문 실패: {req.symbol} {req.side} {req.usdAmount}USDT → {e}")
         return {"status": "error", "message": str(e)}
