@@ -35,7 +35,7 @@ class OrderRequest(BaseModel):
     usdAmount: float
     price: Optional[float] = None
     leverage: int = 10
-    marginMode: str = "cross"
+    marginMode: str = "isolated"
     stopLoss: Optional[float] = None
 
 
