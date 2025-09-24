@@ -145,6 +145,11 @@ async def bitget_order(req: OrderRequest):
 
         bitget_side = map_side_for_bitget(req.side)
 
+        # marginMode 강제 소문자 처리
+        margin_mode = req.marginMode.lower()
+        if margin_mode not in ["cross", "isolated"]:
+            return {"status": "error", "message": f"marginMode는 cross 또는 isolated만 가능합니다. (입력값: {req.marginMode})"}
+
         # 레버리지/마진 모드 설정
         bitget_client.mix_adjust_leverage(
             symbol=req.symbol,
@@ -155,7 +160,7 @@ async def bitget_order(req: OrderRequest):
         bitget_client.mix_adjust_margintype(
             symbol=req.symbol,
             marginCoin="USDT",
-            marginMode=req.marginMode.lower()  # cross / isolated
+            marginMode=margin_mode
         )
 
         # 주문 생성
