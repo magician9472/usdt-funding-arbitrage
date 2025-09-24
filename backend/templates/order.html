@@ -30,7 +30,6 @@
     <label>마진 모드
       <select id="marginMode">
         <option value="isolated">Isolated</option>
-        <option value="cross">Cross</option>
       </select>
     </label>
 
@@ -55,8 +54,12 @@
     </label>
 
     <div class="btns">
-      <button class="btn-buy" onclick="placeOrder('BUY')">매수</button>
-      <button class="btn-sell" onclick="placeOrder('SELL')">매도</button>
+      <!-- 진입 -->
+      <button class="btn-buy" onclick="placeOrder('BUY')">롱 진입</button>
+      <button class="btn-sell" onclick="placeOrder('SELL')">숏 진입</button>
+      <!-- 청산 -->
+      <button class="btn-close-long" onclick="placeOrder('CLOSE_LONG')">롱 청산</button>
+      <button class="btn-close-short" onclick="placeOrder('CLOSE_SHORT')">숏 청산</button>
     </div>
   </div>
 
