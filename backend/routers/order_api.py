@@ -125,9 +125,10 @@ async def bitget_order(req: OrderRequest):
         symbols_info = bitget_client.mix_get_symbols_info("umcbl")
         symbol_info = next(s for s in symbols_info["data"] if s["symbol"] == req.symbol)
 
-        min_trade_num = float(symbol_info["minTradeNum"])
-        price_place = int(symbol_info["pricePlace"])
-        quantity_place = int(symbol_info["quantityPlace"])
+        # 안전하게 필드 조회
+        min_trade_num = float(symbol_info.get("minTradeNum", 0))
+        price_place = int(symbol_info.get("pricePlace", 4))
+        quantity_place = int(symbol_info.get("quantityPlace") or symbol_info.get("volumePlace", 0))
 
         # 수량 계산
         raw_size = req.usdAmount / current_price
