@@ -80,12 +80,10 @@ async def fetch_and_save_bitget():
             for d in funding_data:
                 symbol = d["symbol"]
                 if symbol not in valid_symbols:
-                    # contracts에 없는 심볼은 스킵
                     continue
 
                 funding_rate = float(d.get("fundingRate") or 0)
 
-                # nextUpdate → 다음 펀딩 시간
                 next_update_ms = d.get("nextUpdate")
                 nft = None
                 if next_update_ms:
@@ -123,9 +121,8 @@ async def update_loop():
     try:
         await fetch_and_save_binance()
         await fetch_and_save_bitget()
-        print("✅ Initial funding data updated")
-    except Exception as e:
-        print("❌ Initial fetch error:", e)
+    except Exception:
+        pass
 
     while True:
         now = datetime.now(ZoneInfo("Asia/Seoul"))
@@ -142,6 +139,5 @@ async def update_loop():
         try:
             await fetch_and_save_binance()
             await fetch_and_save_bitget()
-            print(f"✅ Funding data updated at {datetime.now(ZoneInfo('Asia/Seoul'))}")
-        except Exception as e:
-            print("❌ Error:", e)
+        except Exception:
+            pass
