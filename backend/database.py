@@ -2,7 +2,6 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os, sys
 import logging
-from backend.models import FundingRate
 from dotenv import load_dotenv
 
 # # .env 불러오기
