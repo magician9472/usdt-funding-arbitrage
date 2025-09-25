@@ -30,6 +30,7 @@ bitget_ws = (
 # Bitget에서 메시지가 오면 FastAPI WS 클라이언트들에게 중계
 def on_message(message: str):
     try:
+        print("RAW >>>", message)   # Bitget에서 오는 모든 메시지 확인
         data = json.loads(message)
 
         # positions 채널만 프론트로 브로드캐스트

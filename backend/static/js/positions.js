@@ -2,6 +2,7 @@ const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
 const ws = new WebSocket(protocol + window.location.host + "/ws/positions");
 
 ws.onmessage = (event) => {
+  console.log("FROM SERVER >>>", event.data);  // 서버에서 온 원본 확인
   const data = JSON.parse(event.data);
   const list = document.getElementById("positions");
   list.innerHTML = "";
