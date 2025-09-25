@@ -5,10 +5,17 @@ ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
   const list = document.getElementById("positions");
   list.innerHTML = "";
+
   data.forEach(pos => {
     const li = document.createElement("li");
-    li.innerText = pos.instId + " " + pos.holdSide + " " + pos.total;
 
+    // 롱/숏 색상 구분
+    li.style.color = pos.holdSide === "long" ? "green" : "red";
+
+    // 포지션 정보 표시
+    li.innerText = `${pos.instId} | ${pos.holdSide.toUpperCase()} | 수량: ${pos.total}`;
+
+    // Close 버튼
     const btn = document.createElement("button");
     btn.innerText = "Close";
     btn.onclick = () => {
