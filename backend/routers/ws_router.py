@@ -50,7 +50,7 @@ def on_message(message: str):
         logger.error(f"메시지 처리 오류: {e}")
 
 # Bitget 포지션 채널 구독 (instType=USDT-FUTURES, instId=default)
-channels = [SubscribeReq("USDT-FUTURES", "positions", "default")]
+channels = [SubscribeReq("USDT-FUTURES", "positions")]
 bitget_ws.subscribe(channels, on_message)
 
 @router.websocket("/ws/positions")

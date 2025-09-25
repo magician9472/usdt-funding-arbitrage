@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from backend.routers import api, views, private_api, order_api, ws_router
 from backend.update_task import update_loop
-from backend.reset import reset_funding_table
 import logging
 
 
@@ -43,7 +42,6 @@ app.include_router(ws_router.router)
 # 스타트업 이벤트
 @app.on_event("startup")
 async def startup_event():
-    await reset_funding_table()
     asyncio.create_task(update_loop())
 
 
