@@ -1,7 +1,9 @@
 # reset_db.py
 import asyncio
-from backend.database import SessionLocal
-from backend.models import FundingRate
+from database import SessionLocal
+from models import FundingRate
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 async def reset_funding_table():
     async with SessionLocal() as db:
