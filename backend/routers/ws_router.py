@@ -12,8 +12,6 @@ from pybitget import logger
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 router = APIRouter()
-
-# 연결된 클라이언트 저장
 active_clients = set()
 
 # .env 로드
@@ -34,20 +32,21 @@ bitget_ws = (
 # Bitget에서 메시지가 오면 FastAPI WS 클라이언트들에게 중계
 def on_message(message: str):
     try:
-        print("RAW >>>", message)
         data = json.loads(message)
-
         if data.get("arg", {}).get("channel") == "positions":
             payload = data.get("data", [])
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             dead_clients = []
+
             for ws in list(active_clients):
-                try:
-                    loop.call_soon_threadsafe(asyncio.create_task, ws.send_json(payload))
-                except Exception as e:
-                    logger.error(f"클라이언트 전송 오류: {e}")
-                    dead_clients.append(ws)
+                async def _send(ws, payload):
+                    try:
+                        await ws.send_json(payload)
+                    except Exception:
+                        dead_clients.append(ws)
+
+                loop.call_soon_threadsafe(asyncio.create_task, _send(ws, payload))
 
             for ws in dead_clients:
                 active_clients.discard(ws)
@@ -55,7 +54,7 @@ def on_message(message: str):
     except Exception as e:
         logger.error(f"메시지 처리 오류: {e}", exc_info=True)
 
-# Bitget 포지션 채널 구독 (instType=USDT-FUTURES, instId=default → 전체 포지션)
+# ✅ 전체 포지션 구독 (instId="default")
 channels = [SubscribeReq("umcbl", "positions", "default")]
 bitget_ws.subscribe(channels, on_message)
 
@@ -64,8 +63,8 @@ async def positions_ws(websocket: WebSocket):
     await websocket.accept()
     active_clients.add(websocket)
     try:
-        # 연결 유지용 루프 (메시지는 서버에서만 push)
+        # 클라이언트에서 메시지를 안 보내도 연결 유지
         while True:
-            await websocket.receive_text()
+            await asyncio.sleep(10)
     except WebSocketDisconnect:
         active_clients.discard(websocket)
