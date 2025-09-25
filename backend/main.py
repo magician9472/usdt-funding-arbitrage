@@ -4,8 +4,6 @@ import uvicorn
 import logging
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-
-from backend.routers import api, views, private_api, order_api, ws_router
 from backend.update_task import update_loop
 
 # ws_router 안에서 가져올 것들
@@ -44,11 +42,6 @@ app.include_router(ws_router.router)
 async def startup_event():
     # 백그라운드 업데이트 루프
     asyncio.create_task(update_loop())
-
-    # Bitget 포지션 구독 등록
-    channels = [SubscribeReq("umcbl", "positions", "default")]
-    bitget_ws.subscribe(channels, on_message)
-    log.info("Bitget 포지션 채널 구독 시작...")
 
 # 실행부 (Railway 호환)
 if __name__ == "__main__":
