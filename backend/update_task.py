@@ -61,7 +61,7 @@ async def fetch_and_save_bitget_rates():
     now = datetime.now(kst)
 
     async with httpx.AsyncClient() as client:
-        res = await client.get(BITGET_TICKERS_URL, params={"productType": "usdt-futures"})
+        res = await client.get(BITGET_TICKERS_URL, params={"productType": "USDT-FUTURES"})
         data = res.json()["data"]
 
         async with SessionLocal() as db:
