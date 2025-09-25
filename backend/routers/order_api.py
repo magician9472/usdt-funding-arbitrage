@@ -182,23 +182,27 @@ async def bitget_order(req: OrderRequest):
         # -------------------------------
         elif req.side.upper() == "CLOSE_LONG":
             pos = bitget_client.mix_get_single_position(symbol=req.symbol, marginCoin="USDT")
-            qty = float(pos["data"]["total"])
-            if qty > 0:
-                order = bitget_client.mix_place_order(
-                    symbol=req.symbol, marginCoin="USDT",
-                    size=str(qty), side="close_long",
-                    orderType="market", reduceOnly="true"
-                )
+            positions = pos.get("data", [])
+            if positions:
+                qty = float(positions[0].get("total", 0))
+                if qty > 0:
+                    order = bitget_client.mix_place_order(
+                        symbol=req.symbol, marginCoin="USDT",
+                        size=str(qty), side="close_long",
+                        orderType="market", reduceOnly="true"
+                    )
 
         elif req.side.upper() == "CLOSE_SHORT":
             pos = bitget_client.mix_get_single_position(symbol=req.symbol, marginCoin="USDT")
-            qty = float(pos["data"]["total"])
-            if qty > 0:
-                order = bitget_client.mix_place_order(
-                    symbol=req.symbol, marginCoin="USDT",
-                    size=str(qty), side="close_short",
-                    orderType="market", reduceOnly="true"
-                )
+            positions = pos.get("data", [])
+            if positions:
+                qty = float(positions[0].get("total", 0))
+                if qty > 0:
+                    order = bitget_client.mix_place_order(
+                        symbol=req.symbol, marginCoin="USDT",
+                        size=str(qty), side="close_short",
+                        orderType="market", reduceOnly="true"
+                    )
 
         logger.info(f"[BITGET] 주문 성공: {req.symbol} {req.side} → {order}")
         return {"status": "success", "order": order}
