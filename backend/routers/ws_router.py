@@ -51,7 +51,7 @@ def on_message(message: str):
 
 
 # Bitget 포지션 채널 구독 (instType="UMCBL" → USDT 무기한 계약)
-channels = [SubscribeReq("UMCBL", "positions", "default")]
+channels = [SubscribeReq("USDT-FUTURES", "positions", "default")]
 bitget_ws.subscribe(channels, on_message)
 
 
