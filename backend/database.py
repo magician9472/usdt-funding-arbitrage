@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 import os, sys
 import logging
+from backend.models import FundingRate
 from dotenv import load_dotenv
 
 # # .env 불러오기
@@ -29,6 +30,13 @@ SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False
 )
+
+async def reset_funding_table():
+    """FundingRate 테이블 전체 데이터 삭제"""
+    async with SessionLocal() as db:
+        await db.execute(FundingRate.__table__.delete())
+        await db.commit()
+
 
 Base = declarative_base()
 
