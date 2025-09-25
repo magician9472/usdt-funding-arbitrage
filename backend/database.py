@@ -31,13 +31,6 @@ SessionLocal = sessionmaker(
     autoflush=False
 )
 
-async def reset_funding_table():
-    """FundingRate 테이블 전체 데이터 삭제"""
-    async with SessionLocal() as db:
-        await db.execute(FundingRate.__table__.delete())
-        await db.commit()
-
-
 Base = declarative_base()
 
 async def get_db():
