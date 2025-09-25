@@ -48,7 +48,6 @@ def on_message(message: str):
                 log.info("포지션 데이터 없음 (현재 열린 포지션이 없습니다).")
                 return
 
-            # 연결된 모든 클라이언트에 브로드캐스트
             loop = asyncio.get_event_loop()
             dead_clients = []
 
@@ -66,13 +65,6 @@ def on_message(message: str):
 
     except Exception as e:
         log.error(f"메시지 파싱 오류: {e}", exc_info=True)
-
-# FastAPI 서버가 뜰 때 Bitget 구독 시작
-@router.on_event("startup")
-async def startup_event():
-    channels = [SubscribeReq("umcbl", "positions", "default")]
-    bitget_ws.subscribe(channels, on_message)
-    log.info("Bitget 포지션 채널 구독 시작...")
 
 # WebSocket 엔드포인트
 @router.websocket("/ws/positions")
