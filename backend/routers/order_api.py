@@ -144,7 +144,7 @@ async def bitget_order(req: OrderRequest):
         resp = bitget_client.mix_adjust_margintype(
             symbol=req.symbol,
             marginCoin="USDT",
-            marginMode=req.marginMode.lower()
+            marginMode="fixed"
         )
         if resp.get("code") != "00000":
             logger.error(f"[BITGET] 마진 모드 변경 실패: {resp}")
