@@ -33,24 +33,17 @@ def on_message(message: str):
         print("RAW >>>", message)   # Bitget에서 오는 모든 메시지 확인
         data = json.loads(message)
 
-        # positions 채널만 프론트로 브로드캐스트
         if data.get("arg", {}).get("channel") == "positions":
             payload = data.get("data", [])
-            if not payload:
-                return
-
-            # 연결된 모든 클라이언트에 전송
+            # 무조건 보내서 프론트에서 구조 확인
             for ws in list(active_clients):
-                try:
-                    asyncio.create_task(ws.send_json(payload))
-                except Exception as e:
-                    logger.error(f"클라이언트 전송 오류: {e}")
+                asyncio.create_task(ws.send_json(payload))
 
     except Exception as e:
         logger.error(f"메시지 처리 오류: {e}")
 
 # Bitget 포지션 채널 구독 (instType=USDT-FUTURES, instId=default)
-channels = [SubscribeReq("USDT-FUTURES", "positions", "PEPEUSDT")]
+channels = [SubscribeReq("usdt-futures", "positions", "PEPEUSDT")]
 bitget_ws.subscribe(channels, on_message)
 
 @router.websocket("/ws/positions")
