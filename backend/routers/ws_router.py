@@ -35,18 +35,20 @@ def on_message(message: str):
         data = json.loads(message)
         if data.get("arg", {}).get("channel") == "positions":
             payload = data.get("data", [])
+            if not isinstance(payload, list):
+                payload = [payload]
 
-            loop = asyncio.get_running_loop()
+            loop = asyncio.get_event_loop()
             dead_clients = []
 
             for ws in list(active_clients):
-                async def _send(ws, payload):
+                async def _send(ws=ws, payload=payload):
                     try:
                         await ws.send_json(payload)
                     except Exception:
                         dead_clients.append(ws)
 
-                loop.call_soon_threadsafe(asyncio.create_task, _send(ws, payload))
+                loop.call_soon_threadsafe(asyncio.create_task, _send())
 
             for ws in dead_clients:
                 active_clients.discard(ws)
