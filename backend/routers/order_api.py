@@ -141,14 +141,16 @@ async def bitget_order(req: OrderRequest):
             return {"status": "error", "message": f"주문 수량이 최소 요구치({min_trade_num}) 미만입니다."}
 
         # 마진 모드 설정 (포지션 없을 때만 가능)
-        try:
-            bitget_client.mix_adjust_margintype(
-                symbol=req.symbol,
-                marginCoin="USDT",
-                marginMode=req.marginMode.lower()
-            )
-        except Exception:
-            pass
+        resp = bitget_client.mix_adjust_margintype(
+            symbol=req.symbol,          # 반드시 BTCUSDT_UMCBL 형식
+            marginCoin="USDT",
+            marginMode="isolated"
+        )
+
+        if resp.get("code") == "00000":
+            logger.info(f"[BITGET] 마진 모드 변경 성공: {req.symbol} → isolated")
+        else:
+            logger.error(f"[BITGET] 마진 모드 변경 실패: {resp}")
 
         # 레버리지 설정
         bitget_client.mix_adjust_leverage(
