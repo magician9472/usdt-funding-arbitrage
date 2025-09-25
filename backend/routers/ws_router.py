@@ -33,17 +33,25 @@ bitget_ws = (
 def on_message(message: str):
     try:
         data = json.loads(message)
+
+        # 포지션 채널 이벤트만 처리
         if data.get("arg", {}).get("channel") == "positions":
             for pos in data.get("data", []):
                 print("포지션 이벤트:", pos["instId"], pos["holdSide"], pos["total"])
+
+            # 연결된 모든 클라이언트에 브로드캐스트
             for ws in list(active_clients):
-                asyncio.create_task(ws.send_json(data.get("data", [])))
+                try:
+                    asyncio.create_task(ws.send_json(data.get("data", [])))
+                except Exception as e:
+                    logger.error(f"클라이언트 전송 오류: {e}")
+
     except Exception as e:
         logger.error(f"메시지 처리 오류: {e}")
 
 
-# Bitget 포지션 채널 구독 (instId="default" → 전체 포지션)
-channels = [SubscribeReq("USDT-FUTURES", "positions", "default")]
+# Bitget 포지션 채널 구독 (instType="UMCBL" → USDT 무기한 계약)
+channels = [SubscribeReq("UMCBL", "positions", "default")]
 bitget_ws.subscribe(channels, on_message)
 
 

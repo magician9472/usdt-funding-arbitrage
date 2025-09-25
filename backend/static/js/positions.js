@@ -24,8 +24,8 @@ ws.onmessage = (event) => {
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
           symbol: pos.instId,
-          side: pos.holdSide === "long" ? "CLOSE_LONG" : "CLOSE_SHORT",
-          usdAmount: 0
+          side: pos.holdSide,   // "long" 또는 "short"
+          usdAmount: pos.total  // 실제 보유 수량
         })
       });
     };
