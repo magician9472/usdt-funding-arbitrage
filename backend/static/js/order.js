@@ -42,3 +42,14 @@ async function placeOrder(action) {
     showResult({status: "error", message: String(err)});
   }
 }
+
+function showResult(data) {
+  const resultDiv = document.getElementById("result");
+  if (!resultDiv) return;
+
+  if (data.status === "success") {
+    resultDiv.innerText = "✅ 주문 성공: " + JSON.stringify(data.order);
+  } else {
+    resultDiv.innerText = "❌ 오류: " + data.message;
+  }
+}
