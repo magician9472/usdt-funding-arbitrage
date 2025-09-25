@@ -91,16 +91,35 @@ async def binance_order(req: OrderRequest):
             )
 
         # -------------------------------
-        # 청산 (롱/숏)
+        # CLOSE (롱/숏)
         # -------------------------------
         elif req.side == "CLOSE_LONG":
-            order = binance_client.futures_create_order(
-                symbol=req.symbol, side="SELL", type="MARKET", closePosition=True
-            )
+            # 현재 포지션 수량 조회
+            positions = binance_client.futures_position_information(symbol=req.symbol)
+            pos = next((p for p in positions if p["symbol"] == req.symbol), None)
+            if pos and float(pos["positionAmt"]) > 0:
+                qty = abs(float(pos["positionAmt"]))
+                order = binance_client.futures_create_order(
+                    symbol=req.symbol,
+                    side="SELL",
+                    type="MARKET",
+                    quantity=qty,
+                    reduceOnly=True   # 새 포지션이 열리지 않도록 안전장치
+                )
+
         elif req.side == "CLOSE_SHORT":
-            order = binance_client.futures_create_order(
-                symbol=req.symbol, side="BUY", type="MARKET", closePosition=True
-            )
+            positions = binance_client.futures_position_information(symbol=req.symbol)
+            pos = next((p for p in positions if p["symbol"] == req.symbol), None)
+            if pos and float(pos["positionAmt"]) < 0:
+                qty = abs(float(pos["positionAmt"]))
+                order = binance_client.futures_create_order(
+                    symbol=req.symbol,
+                    side="BUY",
+                    type="MARKET",
+                    quantity=qty,
+                    reduceOnly=True
+                )
+
 
         logger.info(f"[BINANCE] 주문 성공: {req.symbol} {req.side} {quantity}개 ≈ {req.usdAmount}USDT → {order}")
         return {"status": "success", "order": order}
