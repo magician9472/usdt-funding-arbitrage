@@ -28,3 +28,7 @@ async def account_page(request: Request):
 @router.get("/order", response_class=HTMLResponse)
 async def order_page(request: Request):
     return templates.TemplateResponse("order.html", {"request": request})
+
+@router.get("/positions", response_class=HTMLResponse)
+async def positions_page(request: Request):
+    return templates.TemplateResponse("positions.html", {"request": request})

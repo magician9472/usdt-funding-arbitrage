@@ -3,9 +3,10 @@ import asyncio
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from backend.routers import api, views, private_api, order_api
+from backend.routers import api, views, private_api, order_api, ws_router
 from backend.update_task import update_loop
 import logging
+
 
 
 # FastAPI 전체 로그 레벨 조정
@@ -36,6 +37,7 @@ app.include_router(api.router)
 app.include_router(views.router)
 app.include_router(private_api.router, prefix="/api")
 app.include_router(order_api.router, prefix="/api")
+app.include_router(ws_router.router)
 
 # 스타트업 이벤트
 @app.on_event("startup")
