@@ -142,15 +142,14 @@ async def bitget_order(req: OrderRequest):
 
         # 마진 모드 설정 (포지션 없을 때만 가능)
         resp = bitget_client.mix_adjust_margintype(
-            symbol=req.symbol,          # 반드시 BTCUSDT_UMCBL 형식
+            symbol=req.symbol,
             marginCoin="USDT",
-            marginMode="isolated"
+            marginMode=req.marginMode.lower()
         )
-
-        if resp.get("code") == "00000":
-            logger.info(f"[BITGET] 마진 모드 변경 성공: {req.symbol} → isolated")
-        else:
+        if resp.get("code") != "00000":
             logger.error(f"[BITGET] 마진 모드 변경 실패: {resp}")
+        else:
+            logger.info(f"[BITGET] 마진 모드 변경 성공: {req.symbol} → {req.marginMode.lower()}")
 
         # 레버리지 설정
         bitget_client.mix_adjust_leverage(
