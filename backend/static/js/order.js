@@ -12,14 +12,6 @@ async function placeOrder(action) {
   }
 
   let sideParam = action;
-
-  if (exchange === "bitget") {
-    if (action === "BUY") sideParam = "open_long";
-    else if (action === "SELL") sideParam = "open_short";
-    else if (action === "CLOSE_LONG") sideParam = "close_long";
-    else if (action === "CLOSE_SHORT") sideParam = "close_short";
-  }
-
   const payload = {
     symbol,
     side: sideParam,
