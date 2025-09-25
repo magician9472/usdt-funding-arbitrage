@@ -45,26 +45,15 @@ def on_message(message: str):
         if data.get("arg", {}).get("channel") == "positions":
             payload = data.get("data", [])
             if not payload:
-                log.info("포지션 데이터 없음 (현재 열린 포지션이 없습니다).")
+                log.info("포지션 데이터 없음")
                 return
 
-            loop = asyncio.get_event_loop()
-            dead_clients = []
-
+            loop = asyncio.get_running_loop()
             for ws in list(active_clients):
-                async def _send(ws=ws, payload=payload):
-                    try:
-                        await ws.send_json(payload)
-                    except Exception:
-                        dead_clients.append(ws)
-
-                loop.call_soon_threadsafe(asyncio.create_task, _send())
-
-            for ws in dead_clients:
-                active_clients.discard(ws)
-
+                asyncio.run_coroutine_threadsafe(ws.send_json(payload), loop)
     except Exception as e:
         log.error(f"메시지 파싱 오류: {e}", exc_info=True)
+
 
 # WebSocket 엔드포인트
 @router.websocket("/ws/positions")
