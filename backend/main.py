@@ -4,10 +4,10 @@ import uvicorn
 import logging
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+
+from backend.routers import api, views, private_api, order_api, ws_router
 from backend.update_task import update_loop
 
-# ws_router 안에서 가져올 것들
-from backend.routers.ws_router import bitget_ws, on_message, SubscribeReq, log
 
 # FastAPI 전체 로그 레벨 조정
 logging.basicConfig(level=logging.WARNING)
