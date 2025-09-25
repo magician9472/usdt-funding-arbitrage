@@ -89,7 +89,7 @@ async def binance_order(req: OrderRequest):
             )
 
         # -------------------------------
-        # 청산 (롱/숏) → 포지션 조회 후 반대 주문
+        # close (롱/숏) → 포지션 조회 후 반대 주문
         # -------------------------------
         elif req.side == "CLOSE_LONG":
             positions = binance_client.futures_position_information(symbol=req.symbol)
@@ -144,7 +144,7 @@ async def bitget_order(req: OrderRequest):
         resp = bitget_client.mix_adjust_margintype(
             symbol=req.symbol,
             marginCoin="USDT",
-            marginMode="fixed"
+            marginMode="fixed" #isolated = fixed, cross = crossed로 써야함
         )
         if resp.get("code") != "00000":
             logger.error(f"[BITGET] 마진 모드 변경 실패: {resp}")
@@ -178,7 +178,7 @@ async def bitget_order(req: OrderRequest):
             )
 
         # -------------------------------
-        # 청산 (롱/숏) → 포지션 조회 후 반대 주문
+        # close(롱/숏) → 포지션 조회 후 반대 주문
         # -------------------------------
         elif req.side.upper() == "CLOSE_LONG":
             pos = bitget_client.mix_get_single_position(symbol=req.symbol, marginCoin="USDT")
