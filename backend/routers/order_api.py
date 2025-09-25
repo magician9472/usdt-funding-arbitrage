@@ -135,9 +135,11 @@ async def binance_order(req: OrderRequest):
 @router.post("/bitget/order")
 async def bitget_order(req: OrderRequest):
     try:
+        # 현재가 조회
         ticker = bitget_client.mix_get_market_price(symbol=req.symbol)
         current_price = float(ticker["data"]["markPrice"])
 
+        # 심볼 정보 조회
         symbols_info = bitget_client.mix_get_symbols_info("umcbl")
         symbol_info = next(s for s in symbols_info["data"] if s["symbol"] == req.symbol)
 
@@ -145,31 +147,19 @@ async def bitget_order(req: OrderRequest):
         price_place = int(symbol_info.get("pricePlace", 4))
         quantity_place = int(symbol_info.get("quantityPlace") or symbol_info.get("volumePlace", 0))
 
+        # 수량 계산 (진입 시에만 사용)
         raw_size = req.usdAmount / current_price
         size = round(raw_size, quantity_place)
 
-        if size < min_trade_num:
+        if size < min_trade_num and req.side in ["BUY", "SELL"]:
             return {"status": "error", "message": f"주문 수량이 최소 요구치({min_trade_num}) 미만입니다."}
-
-        # side 매핑
-        def map_side_for_bitget(side: str) -> str:
-            side = side.lower()
-            if side == "buy":
-                return "open_long"
-            elif side == "sell":
-                return "open_short"
-            elif side == "close_long":
-                return "close_long"
-            elif side == "close_short":
-                return "close_short"
-            return side
-
-        bitget_side = map_side_for_bitget(req.side)
 
         # marginMode 보정
         margin_mode = req.marginMode.lower()
+        if margin_mode == "cross":
+            margin_mode = "crossed"
 
-        # 레버리지/마진 모드 설정 (Binance와 동일하게)
+        # 레버리지/마진 모드 설정
         bitget_client.mix_set_margin_mode(
             symbol=req.symbol,
             productType="umcbl",
@@ -180,25 +170,50 @@ async def bitget_order(req: OrderRequest):
             symbol=req.symbol,
             marginCoin="USDT",
             leverage=str(req.leverage),
-            holdSide="long" if "long" in bitget_side else "short"
+            holdSide="long" if req.side.lower() in ["buy", "close_short"] else "short"
         )
 
-        # 주문 생성 → 기본 MARKET
-        if req.price:
-            price = round(req.price, price_place)
+        order = None
+
+        # -------------------------------
+        # 진입 (롱/숏) → MARKET 기본
+        # -------------------------------
+        if req.side.upper() == "BUY":
             order = bitget_client.mix_place_order(
                 symbol=req.symbol, marginCoin="USDT",
-                size=str(size), side=bitget_side,
-                orderType="limit", price=str(price)
+                size=str(size), side="open_long",
+                orderType="market"
             )
-        else:
+        elif req.side.upper() == "SELL":
             order = bitget_client.mix_place_order(
                 symbol=req.symbol, marginCoin="USDT",
-                size=str(size), side=bitget_side,
+                size=str(size), side="open_short",
                 orderType="market"
             )
 
-        logger.info(f"[BITGET] 주문 성공: {req.symbol} {bitget_side} {size}개 ≈ {req.usdAmount}USDT")
+        # -------------------------------
+        # CLOSE (롱/숏) → 포지션 조회 후 반대 주문
+        # -------------------------------
+        elif req.side.upper() == "CLOSE_LONG":
+            pos = bitget_client.mix_get_single_position(symbol=req.symbol, marginCoin="USDT")
+            qty = float(pos["data"]["total"])
+            if qty > 0:
+                order = bitget_client.mix_place_order(
+                    symbol=req.symbol, marginCoin="USDT",
+                    size=str(qty), side="close_long",
+                    orderType="market", reduceOnly="true"
+                )
+        elif req.side.upper() == "CLOSE_SHORT":
+            pos = bitget_client.mix_get_single_position(symbol=req.symbol, marginCoin="USDT")
+            qty = float(pos["data"]["total"])
+            if qty > 0:
+                order = bitget_client.mix_place_order(
+                    symbol=req.symbol, marginCoin="USDT",
+                    size=str(qty), side="close_short",
+                    orderType="market", reduceOnly="true"
+                )
+
+        logger.info(f"[BITGET] 주문 성공: {req.symbol} {req.side} → {order}")
         return {"status": "success", "order": order}
 
     except Exception as e:
