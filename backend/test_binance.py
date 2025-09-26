@@ -4,18 +4,17 @@ from binance import AsyncClient
 import websockets
 
 TARGET_SYMBOL = None   # 스냅샷에서 열린 포지션 심볼을 저장
-
 positions, mark_prices = {}, {}
 
-def normalize_position(pos: dict):
+def normalize_position(pos: dict, margin_map: dict):
     """REST 포지션 데이터를 짧은 키로 맞춤"""
+    symbol = pos.get("symbol")
     return {
-        "pa": pos.get("positionAmt"),
-        "ep": pos.get("entryPrice"),
-        "up": pos.get("unRealizedProfit"),
-        "ps": pos.get("positionSide"),
-        "mt": pos.get("marginType"),
-        "l": pos.get("liquidationPrice"),
+        "pa": pos.get("positionAmt"),        # position amount
+        "ep": pos.get("entryPrice"),         # entry price
+        "up": pos.get("unRealizedProfit"),   # unrealized PnL
+        "l": pos.get("liquidationPrice"),    # liquidation price
+        "iw": pos.get("isolatedMargin")      # isolatedMargin → iw 로 저장
     }
 
 async def show_positions():
@@ -28,6 +27,15 @@ async def show_positions():
         entry = float(pos.get("ep", 0) or 0)
         size = float(pos.get("pa", 0) or 0)
         upl = pos.get("up")
+
+        # side 계산 (positionAmt 부호 기준)
+        if size > 0:
+            side = "LONG"
+        elif size < 0:
+            side = "SHORT"
+        else:
+            side = "FLAT"
+
         try:
             if mark and entry and size:
                 m = float(mark)
@@ -37,9 +45,10 @@ async def show_positions():
                     upl = (entry - m) * abs(size)
         except Exception:
             pass
-        print(f"[{symbol}] side={pos.get('ps')} size={size} "
+
+        print(f"[{symbol}] side={side} size={size} "
               f"entry={entry} mark={mark} upl={upl} "
-              f"liq={pos.get('l')} marginType={pos.get('mt')}")
+              f"liq={pos.get('l')} margin(iw)={pos.get('iw')}")
     print("="*80 + "\n")
 
 async def snapshot_and_stream():
@@ -52,13 +61,17 @@ async def snapshot_and_stream():
 
     # ✅ 스냅샷: 열린 포지션 하나만 선택
     all_positions = await client.futures_position_information()
+    account_info = await client.futures_account()
     await client.close_connection()
+
+    # 심볼별 margin 맵 생성 (float 변환)
+    margin_map = {p["symbol"]: float(p.get("isolatedMargin", 0)) for p in account_info["positions"]}
 
     for pos in all_positions:
         if float(pos.get("positionAmt", 0) or 0) != 0:
             symbol = pos["symbol"]
             TARGET_SYMBOL = symbol
-            positions[symbol] = normalize_position(pos)
+            positions[symbol] = normalize_position(pos, margin_map)
             break
 
     await show_positions()

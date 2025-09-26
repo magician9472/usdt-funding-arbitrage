@@ -26,11 +26,11 @@ if not all([BINANCE_KEY, BINANCE_SECRET]):
 def normalize_position(pos: dict):
     """REST 포지션 데이터를 짧은 키로 맞춤"""
     return {
-        "pa": pos.get("positionAmt"),       # position amount
-        "ep": pos.get("entryPrice"),        # entry price
-        "up": pos.get("unRealizedProfit"),  # unrealized PnL
-        "l": pos.get("liquidationPrice"),   # liquidation price
-        "im": pos.get("isolatedMargin"),    # isolated margin (스냅샷 시점만)
+        "pa": pos.get("positionAmt"),        # position amount
+        "ep": pos.get("entryPrice"),         # entry price
+        "up": pos.get("unRealizedProfit"),   # unrealized PnL
+        "l": pos.get("liquidationPrice"),    # liquidation price
+        "iw": pos.get("isolatedMargin"),     # isolated margin → iw 로 통일
     }
 
 
@@ -64,13 +64,13 @@ def broadcast():
         merged.append({
             "exchange": "binance",
             "symbol": symbol,
-            "side": side,             # ← positionAmt 기준으로 계산된 방향
+            "side": side,
             "size": size,
             "upl": upl,
             "entryPrice": entry,
             "markPrice": mark,
             "liqPrice": pos.get("l"),
-            "margin": pos.get("im"),  # isolatedMargin (스냅샷 시점)
+            "margin": pos.get("iw"),   # ← iw 로 통일
         })
 
     if not merged:
@@ -98,7 +98,7 @@ async def binance_worker():
             symbol = pos["symbol"]
             TARGET_SYMBOL = symbol
             norm = normalize_position(pos)
-            norm["im"] = margin_map.get(symbol)
+            norm["iw"] = margin_map.get(symbol)   # ← iw 로 맞춤
             last_positions[symbol] = norm
             break
 
