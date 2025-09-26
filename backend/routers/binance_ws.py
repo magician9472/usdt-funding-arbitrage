@@ -25,7 +25,7 @@ if not all([BINANCE_KEY, BINANCE_SECRET]):
 def normalize_position(pos: dict):
     """REST 포지션 데이터를 짧은 키로 맞춤"""
     return {
-        "pa": pos.get("positionAmt"),        # position amount (string)
+        "pa": pos.get("positionAmt"),        # position amount
         "ep": pos.get("entryPrice"),         # entry price
         "up": pos.get("unRealizedProfit"),   # unrealized PnL
         "l": pos.get("liquidationPrice"),    # liquidation price
@@ -40,7 +40,6 @@ def broadcast():
     for symbol, pos in last_positions.items():
         mark = last_mark_prices.get(symbol)
 
-        # positionAmt → float 변환 (부호 유지)
         try:
             size = float(pos.get("pa") or 0)
         except Exception:
@@ -53,7 +52,7 @@ def broadcast():
 
         upl = pos.get("up")
 
-        # ✅ 방향 계산 (부호 기준)
+        # 방향 계산
         if size > 0:
             side = "LONG"
         elif size < 0:
@@ -61,7 +60,7 @@ def broadcast():
         else:
             side = "FLAT"
 
-        # ✅ UPL 재계산 (markPrice 기반)
+        # UPL 재계산
         try:
             if mark and entry and size:
                 m = float(mark)
@@ -92,40 +91,45 @@ def broadcast():
         asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
 
 
-async def binance_worker():
-    """Binance 포지션 + markPrice 실시간 업데이트"""
-    client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
-
-    # 스냅샷: 모든 열린 포지션 가져오기
-    all_positions = await client.futures_position_information()
-    account_info = await client.futures_account()
-    await client.close_connection()
-
-    margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
-    margin_type_map = {p["symbol"]: p.get("marginType") for p in account_info["positions"]}
-
-    # 열린 포지션만 저장
-    for pos in all_positions:
+async def refresh_positions():
+    """주기적으로 REST API 스냅샷을 갱신해서 닫힌 포지션 제거"""
+    global last_positions
+    while True:
         try:
-            amt = float(pos.get("positionAmt") or 0)
-        except Exception:
-            amt = 0.0
+            client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
+            all_positions = await client.futures_position_information()
+            account_info = await client.futures_account()
+            await client.close_connection()
 
-        if amt != 0:
-            symbol = pos["symbol"]
-            norm = normalize_position(pos)
-            norm["iw"] = margin_map.get(symbol)
-            norm["mt"] = margin_type_map.get(symbol)
-            last_positions[symbol] = norm
+            margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
+            margin_type_map = {p["symbol"]: p.get("marginType") for p in account_info["positions"]}
 
-    if not last_positions:
-        log.info("열린 포지션이 없습니다.")
-        return
+            updated = {}
+            for pos in all_positions:
+                amt = float(pos.get("positionAmt") or 0)
+                symbol = pos["symbol"]
+                if amt != 0:
+                    norm = normalize_position(pos)
+                    norm["iw"] = margin_map.get(symbol)
+                    norm["mt"] = margin_type_map.get(symbol)
+                    updated[symbol] = norm
 
-    # ✅ markPrice 스트림 (모든 심볼 수신)
+            # ✅ 열린 포지션만 유지, 닫힌 건 자동 제거
+            last_positions = updated
+            broadcast()
+
+        except Exception as e:
+            log.error(f"포지션 갱신 오류: {e}")
+
+        await asyncio.sleep(5)  # 5초마다 갱신
+
+
+async def binance_worker():
+    """Binance markPrice 실시간 업데이트"""
+    # markPrice 스트림
     url_mark = "wss://fstream.binance.com/ws/!markPrice@arr@1s"
     async with websockets.connect(url_mark, ping_interval=20, ping_timeout=20) as ws:
-        log.info(f"실시간 markPrice 수신 시작 (심볼 수: {len(last_positions)})")
+        log.info("실시간 markPrice 수신 시작")
         while True:
             raw = await ws.recv()
             data = json.loads(raw)
