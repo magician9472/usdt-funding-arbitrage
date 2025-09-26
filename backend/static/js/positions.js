@@ -18,18 +18,19 @@ ws.onmessage = (event) => {
 
   data.forEach(pos => {
     const row = document.createElement("tr");
-    const pnl = parseFloat(pos.pnl);
-    const pnlColor = isNaN(pnl) ? "black" : (pnl >= 0 ? "green" : "red");
+    const upl = parseFloat(pos.upl);
+    const uplColor = isNaN(upl) ? "black" : (upl >= 0 ? "green" : "red");
 
     row.innerHTML = `
       <td>${pos.symbol}</td>
       <td class="${pos.side === "long" ? "long" : "short"}">${pos.side?.toUpperCase()}</td>
       <td>${pos.size}</td>
+      <td style="color:${uplColor};">${upl}</td>
       <td>${pos.entryPrice}</td>
       <td>${pos.markPrice}</td>
       <td>${pos.liqPrice}</td>
       <td>${pos.margin}</td>
-      <td style="color:${pnlColor};">${pnl?.toFixed(4)}</td>
+
     `;
     body.appendChild(row);
   });

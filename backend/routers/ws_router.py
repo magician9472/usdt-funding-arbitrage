@@ -6,8 +6,8 @@ from pybitget.stream import BitgetWsClient, handel_error
 router = APIRouter()
 active_clients = set()
 loop = None
-last_positions = {}     # 심볼별 포지션 상태
-last_mark_prices = {}   # 심볼별 최신 마크프라이스
+last_positions = {}
+last_mark_prices = {}
 
 log = logging.getLogger("positions-sub")
 
@@ -32,38 +32,19 @@ bitget_ws = (
     .build()
 )
 
-def calc_pnl(entry, mark, size, side):
-    """실시간 PNL 계산"""
-    try:
-        entry, mark, size = float(entry), float(mark), float(size)
-    except (TypeError, ValueError):
-        return None
-    if side == "long":
-        return (mark - entry) * size
-    elif side == "short":
-        return (entry - mark) * size
-    return None
-
 def broadcast():
     """포지션 + 마크프라이스 합쳐서 클라이언트에 전송"""
     merged = []
     for symbol, pos in last_positions.items():
-        entry = pos.get("avgEntryPrice")
-        size = pos.get("total")
-        side = pos.get("holdSide")
-        mark = last_mark_prices.get(symbol, pos.get("markPrice"))
-
-        pnl = calc_pnl(entry, mark, size, side)
-
         merged.append({
             "symbol": symbol,
-            "side": side,
-            "size": size,
-            "entryPrice": entry,
-            "markPrice": mark,
+            "side": pos.get("holdSide"),
+            "size": pos.get("total"),
+            "entryPrice": pos.get("avgOpenPrice"),   # Bitget 문서상 필드명
+            "markPrice": last_mark_prices.get(symbol, pos.get("markPrice")),
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
-            "pnl": pnl,
+            "upl": pos.get("upl"),                  # Bitget 제공 미실현 손익
         })
 
     if not merged:
