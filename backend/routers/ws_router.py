@@ -1,7 +1,7 @@
 import os, json, asyncio, logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
-from binance import ThreadedWebsocketManager, Client
+from binance import AsyncClient, BinanceSocketManager
 from pybitget.stream import BitgetWsClient, handel_error, SubscribeReq
 
 app = FastAPI()
@@ -35,9 +35,6 @@ bitget_ws = (
     .error_listener(handel_error)
     .build()
 )
-
-# Binance REST + WS 클라이언트
-binance_client = Client(BINANCE_KEY, BINANCE_SECRET)
 
 # ✅ 브로드캐스트
 def broadcast():
@@ -75,7 +72,7 @@ def broadcast():
         })
 
     for ws in list(active_clients):
-        asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
+        asyncio.create_task(ws.send_json(merged))
 
 # ✅ Bitget 메시지 핸들러
 def on_bitget_message(message: str):
@@ -104,25 +101,12 @@ def on_bitget_message(message: str):
         broadcast()
 
 # ✅ Binance 핸들러
-def handle_user_data(msg):
-    if msg.get("e") == "ACCOUNT_UPDATE":
-        for pos in msg["a"]["P"]:
-            symbol = pos["s"]
-            if float(pos.get("pa", 0)) != 0:
-                positions_binance[symbol] = pos
-            else:
-                positions_binance.pop(symbol, None)
-        broadcast()
+async def binance_ws_loop():
+    client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
+    bm = BinanceSocketManager(client)
 
-def handle_mark_price(msg):
-    if msg.get("e") == "markPriceUpdate":
-        symbol = msg["s"]
-        mark_prices_binance[symbol] = msg["p"]
-        broadcast()
-
-# ✅ Binance 초기 스냅샷
-def load_initial_positions():
-    all_positions = binance_client.futures_position_information()
+    # 초기 포지션 로드
+    all_positions = await client.futures_position_information()
     for pos in all_positions:
         if float(pos.get("positionAmt", 0)) != 0:
             positions_binance[pos["symbol"]] = {
@@ -131,18 +115,36 @@ def load_initial_positions():
                 "ep": pos.get("entryPrice"),
                 "up": pos.get("unRealizedProfit"),
                 "ps": pos.get("positionSide"),
-                "mt": pos.get("marginType"),          # ✅ 안전하게 get
-                "l": pos.get("liquidationPrice"),     # ✅ 안전하게 get
+                "mt": pos.get("marginType"),
+                "l": pos.get("liquidationPrice"),
             }
 
-# ✅ Binance WebSocket 시작
-def start_binance_ws():
-    twm = ThreadedWebsocketManager(api_key=BINANCE_KEY, api_secret=BINANCE_SECRET)
-    twm.start()
-    twm.start_futures_user_socket(callback=handle_user_data)
-    twm.start_symbol_mark_price_socket(symbol="BTCUSDT", callback=handle_mark_price, fast=True)
-    twm.start_symbol_mark_price_socket(symbol="ETHUSDT", callback=handle_mark_price, fast=True)
-    return twm
+    # user data stream
+    async def user_data_handler():
+        async with bm.futures_user_socket() as stream:
+            async for msg in stream:
+                if msg.get("e") == "ACCOUNT_UPDATE":
+                    for pos in msg["a"]["P"]:
+                        symbol = pos["s"]
+                        if float(pos.get("pa", 0)) != 0:
+                            positions_binance[symbol] = pos
+                        else:
+                            positions_binance.pop(symbol, None)
+                    broadcast()
+
+    # mark price stream
+    async def mark_price_handler(symbol):
+        async with bm.symbol_mark_price_socket(symbol) as stream:
+            async for msg in stream:
+                if msg.get("e") == "markPriceUpdate":
+                    mark_prices_binance[msg["s"]] = msg["p"]
+                    broadcast()
+
+    await asyncio.gather(
+        user_data_handler(),
+        mark_price_handler("BTCUSDT"),
+        mark_price_handler("ETHUSDT"),
+    )
 
 # ✅ FastAPI WebSocket 엔드포인트
 @app.websocket("/ws/positions")
@@ -157,6 +159,7 @@ async def positions_ws(websocket: WebSocket):
     except WebSocketDisconnect:
         active_clients.discard(websocket)
 
-# 실행 시 초기화
-load_initial_positions()
-twm = start_binance_ws()
+# ✅ FastAPI 시작 시 Binance WS 루프 실행
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(binance_ws_loop())
