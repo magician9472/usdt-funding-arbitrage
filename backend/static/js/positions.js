@@ -20,13 +20,22 @@ ws.onmessage = (event) => {
     return;
   }
 
-  // 서버에서 배열을 보내주지만, 혹시 단일 객체가 올 경우 대비
+  const list = document.getElementById("positions");
+  list.innerHTML = "";
+
+  // 포지션 없음 메시지 처리
+  if (data.msg) {
+    const li = document.createElement("li");
+    li.innerText = data.msg;
+    li.style.color = "gray";
+    list.appendChild(li);
+    return;
+  }
+
+  // 배열/단일 객체 모두 대응
   if (!Array.isArray(data)) {
     data = [data];
   }
-
-  const list = document.getElementById("positions");
-  list.innerHTML = "";
 
   data.forEach(pos => {
     const li = document.createElement("li");
@@ -38,16 +47,8 @@ ws.onmessage = (event) => {
 
 ws.onerror = (err) => {
   console.error("❌ WebSocket 에러:", err);
-  const li = document.createElement("li");
-  li.innerText = "❌ WebSocket 에러 발생 (콘솔 확인)";
-  li.style.color = "red";
-  document.getElementById("positions").appendChild(li);
 };
 
 ws.onclose = () => {
   console.log("❌ WebSocket 연결 종료");
-  const li = document.createElement("li");
-  li.innerText = "❌ WebSocket 연결 종료";
-  li.style.color = "gray";
-  document.getElementById("positions").appendChild(li);
 };

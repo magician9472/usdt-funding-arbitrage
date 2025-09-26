@@ -1,7 +1,4 @@
-import os
-import json
-import asyncio
-import logging
+import os, json, asyncio, logging
 from dotenv import load_dotenv
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pybitget.stream import BitgetWsClient, SubscribeReq, handel_error
@@ -10,7 +7,6 @@ router = APIRouter()
 active_clients = set()
 loop = None  # FastAPI 이벤트 루프 저장용
 
-# 로그 설정
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger("positions-sub")
 
@@ -42,7 +38,7 @@ def on_message(message: str):
         if data.get("arg", {}).get("channel") == "positions":
             payload = data.get("data", [])
             if not payload:
-                # 포지션 없을 때도 클라이언트에 알림
+                # 포지션 없음 메시지
                 for ws in list(active_clients):
                     try:
                         asyncio.run_coroutine_threadsafe(
@@ -52,6 +48,7 @@ def on_message(message: str):
                         active_clients.discard(ws)
                 return
 
+            # 포지션 데이터 브로드캐스트
             for ws in list(active_clients):
                 try:
                     asyncio.run_coroutine_threadsafe(ws.send_json(payload), loop)
@@ -74,7 +71,6 @@ async def startup_event():
 async def positions_ws(websocket: WebSocket):
     await websocket.accept()
     active_clients.add(websocket)
-    await websocket.send_text(json.dumps({"_test": "hello", "ts": int(asyncio.get_running_loop().time()*1000)}))
     try:
         while True:
             await asyncio.sleep(10)  # keep-alive
