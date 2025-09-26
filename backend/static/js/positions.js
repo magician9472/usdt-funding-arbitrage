@@ -25,11 +25,11 @@ ws.onmessage = (event) => {
       <td>${pos.symbol}</td>
       <td class="${pos.side === "long" ? "long" : "short"}">${pos.side?.toUpperCase()}</td>
       <td>${pos.size}</td>
-      <td style="color:${pnlColor};">${pnl?.toFixed(4)}</td>
       <td>${pos.entryPrice}</td>
       <td>${pos.markPrice}</td>
       <td>${pos.liqPrice}</td>
       <td>${pos.margin}</td>
+      <td style="color:${pnlColor};">${pnl?.toFixed(4)}</td>
     `;
     body.appendChild(row);
   });
