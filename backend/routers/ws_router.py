@@ -8,7 +8,8 @@ active_clients = set()
 loop = None
 last_positions = {}
 last_mark_prices = {}
-subscribed_symbols = set()   # markPrice 채널에 구독한 심볼(PEPEUSDT 등)
+pos_to_base = {}            # 포지션 심볼 → markPrice 심볼 매핑
+subscribed_symbols = set()  # markPrice 채널에 구독한 심볼(PEPEUSDT 등)
 
 log = logging.getLogger("positions-markprice")
 
@@ -36,16 +37,15 @@ bitget_ws = (
 def broadcast():
     """포지션 + markPrice 합쳐서 브로드캐스트"""
     merged = []
-    for symbol, pos in last_positions.items():
-        # instId 예: "PEPEUSDT_UMCBL"
-        base_symbol = symbol.split("_")[0]  # markPrice 채널용 심볼
+    for pos_symbol, pos in last_positions.items():
+        base_symbol = pos_to_base.get(pos_symbol)  # 매핑된 심볼
         merged.append({
-            "symbol": symbol,
+            "symbol": pos_symbol,  # 예: PEPEUSDT_UMCBL
             "side": pos.get("holdSide"),
             "size": pos.get("total"),
             "upl": pos.get("upl"),
             "entryPrice": pos.get("avgOpenPrice"),
-            "markPrice": last_mark_prices.get(base_symbol),  # base_symbol 기준으로 매핑
+            "markPrice": last_mark_prices.get(base_symbol),  # 매핑된 심볼 기준
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
         })
@@ -57,7 +57,7 @@ def broadcast():
         asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
 
 def on_message(message: str):
-    global last_positions, last_mark_prices, subscribed_symbols
+    global last_positions, last_mark_prices, subscribed_symbols, pos_to_base
     try:
         data = json.loads(message)
         arg = data.get("arg", {})
@@ -70,13 +70,13 @@ def on_message(message: str):
             last_positions = {}
             for pos in payload:
                 instId = pos["instId"]              # 예: "PEPEUSDT_UMCBL"
-                last_positions[instId] = pos
-                current_symbols.add(instId)
-
-                # markPrice 채널용 심볼 추출
                 base_symbol = instId.split("_")[0]  # "PEPEUSDT"
 
-                # 새 포지션 심볼이면 markPrice 채널 구독
+                last_positions[instId] = pos
+                pos_to_base[instId] = base_symbol   # 매핑 저장
+                current_symbols.add(instId)
+
+                # 새 심볼이면 markPrice 채널 구독
                 if base_symbol not in subscribed_symbols:
                     bitget_ws.subscribe(
                         [SubscribeReq("mc", "markPrice", base_symbol)], on_message
@@ -84,13 +84,14 @@ def on_message(message: str):
                     subscribed_symbols.add(base_symbol)
 
             # 포지션이 사라진 심볼은 markPrice 구독 해제
-            removed = {s.split("_")[0] for s in current_symbols} ^ subscribed_symbols
+            removed = {pos_to_base[s] for s in pos_to_base if s not in current_symbols}
             for base_symbol in removed:
-                bitget_ws.unsubscribe(
-                    [SubscribeReq("mc", "markPrice", base_symbol)], on_message
-                )
-                subscribed_symbols.remove(base_symbol)
-                last_mark_prices.pop(base_symbol, None)
+                if base_symbol in subscribed_symbols:
+                    bitget_ws.unsubscribe(
+                        [SubscribeReq("mc", "markPrice", base_symbol)], on_message
+                    )
+                    subscribed_symbols.remove(base_symbol)
+                    last_mark_prices.pop(base_symbol, None)
 
             broadcast()
 
