@@ -10,7 +10,7 @@ from backend.update_task import update_loop
 
 
 # FastAPI 전체 로그 레벨 조정
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 # SQLAlchemy 관련
 logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
