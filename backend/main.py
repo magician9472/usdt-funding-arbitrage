@@ -4,9 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from backend.routers import api, views, private_api, order_api, ws_router, binance_ws
-
 from backend.update_task import update_loop
 from pybitget.stream import SubscribeReq
+
+# ✅ binance_start 불러오기
+from backend.routers.binance_ws import binance_start  
 
 logging.basicConfig(level=logging.INFO)
 
@@ -14,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     ws_router.loop = loop
-    binance_ws.loop = loop   # ✅ Binance도 동일하게 루프 주입
+    binance_ws.loop = loop   # Binance도 동일하게 루프 주입
 
     # Bitget 초기 구독
     ws_router.bitget_ws.subscribe(
@@ -23,10 +25,11 @@ async def lifespan(app: FastAPI):
     )
     print("🚀 Bitget positions 구독 시작")
 
-    # Binance worker 실행
-    asyncio.create_task(binance_ws.binance_worker())
-    print("🚀 Binance worker 시작")
+    # ✅ Binance 스타터 실행 (포지션 리프레시 + 마크프라이스 스트림)
+    await binance_start()
+    print("🚀 Binance start 실행")
 
+    # 기타 업데이트 루프
     asyncio.create_task(update_loop())
     yield
 
@@ -47,7 +50,6 @@ app.include_router(private_api.router, prefix="/api")
 app.include_router(order_api.router, prefix="/api")
 app.include_router(ws_router.router)
 app.include_router(binance_ws.router)
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

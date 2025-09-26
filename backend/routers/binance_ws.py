@@ -6,18 +6,21 @@ import websockets
 
 router = APIRouter()
 active_clients = set()
-loop = None  # ✅ run_coroutine_threadsafe에 사용할 이벤트 루프
+loop = None  # run_coroutine_threadsafe에 사용할 이벤트 루프
 
-last_positions = {}        # {symbol: pos}
-last_mark_prices = {}      # {symbol: markPrice}
+# 상태
+last_positions = {}        # {symbol: pos(dict)}
+last_mark_prices = {}      # {symbol: markPrice(str)}
+subscribed_symbols = set() # 현재 마크프라이스 스트림에 구독 중인 심볼들
+symbols_changed = asyncio.Event()  # 구독 집합 변경 알림
 
 log = logging.getLogger("binance-positions")
+log.setLevel(logging.INFO)
 
 # .env 로드
 load_dotenv()
 BINANCE_KEY = os.getenv("BINANCE_API_KEY")
 BINANCE_SECRET = os.getenv("BINANCE_API_SECRET")
-
 if not all([BINANCE_KEY, BINANCE_SECRET]):
     raise RuntimeError("환경변수 BINANCE_API_KEY, BINANCE_API_SECRET 를 설정하세요.")
 
@@ -25,22 +28,23 @@ if not all([BINANCE_KEY, BINANCE_SECRET]):
 def normalize_position(pos: dict):
     """REST 포지션 데이터를 짧은 키로 맞춤"""
     return {
-        "pa": pos.get("positionAmt"),        # position amount (string)
-        "ep": pos.get("entryPrice"),         # entry price
-        "up": pos.get("unRealizedProfit"),   # unrealized PnL
-        "l": pos.get("liquidationPrice"),    # liquidation price
-        "iw": pos.get("isolatedMargin"),     # isolated margin
+        "pa": pos.get("positionAmt"),        # position amount (string, 부호로 방향)
+        "ep": pos.get("entryPrice"),         # entry price (string)
+        "up": pos.get("unRealizedProfit"),   # unrealized PnL (string)
+        "l": pos.get("liquidationPrice"),    # liquidation price (string)
+        "iw": pos.get("isolatedMargin"),     # isolated margin (string, Cross면 None)
         "mt": pos.get("marginType"),         # margin type (ISOLATED / CROSSED)
     }
 
 
 def broadcast():
-    """현재 포지션 + markPrice + UPL 계산해서 모든 클라이언트에 전송"""
+    """포지션 + markPrice + 실시간 UPL 합쳐서 브로드캐스트"""
     merged = []
+
     for symbol, pos in last_positions.items():
         mark = last_mark_prices.get(symbol)
 
-        # positionAmt → float 변환 (부호 유지)
+        # 안전 변환
         try:
             size = float(pos.get("pa") or 0)
         except Exception:
@@ -53,7 +57,7 @@ def broadcast():
 
         upl = pos.get("up")
 
-        # ✅ 방향 계산 (부호 기준)
+        # 방향
         if size > 0:
             side = "LONG"
         elif size < 0:
@@ -61,20 +65,17 @@ def broadcast():
         else:
             side = "FLAT"
 
-        # ✅ UPL 재계산 (markPrice 기반)
+        # UPL 재계산
         try:
-            if mark and entry and size:
+            if mark is not None and entry != 0 and size != 0:
                 m = float(mark)
-                if size > 0:
-                    upl = (m - entry) * size
-                elif size < 0:
-                    upl = (entry - m) * abs(size)
+                upl = (m - entry) * size if size > 0 else (entry - m) * abs(size)
         except Exception as e:
             log.error(f"Binance UPL 계산 오류: {e}")
 
         merged.append({
             "exchange": "binance",
-            "symbol": symbol,
+            "symbol": symbol,         # 예: PEPEUSDT
             "side": side,
             "size": size,
             "upl": upl,
@@ -88,9 +89,8 @@ def broadcast():
     if not merged:
         merged = [{"msg": "현재 열린 포지션이 없습니다."}]
 
-    # ✅ 이벤트 루프 설정 확인
     if loop is None:
-        log.warning("이벤트 루프가 설정되지 않았습니다. WebSocket에 전송하지 못할 수 있습니다.")
+        log.warning("이벤트 루프가 설정되지 않았습니다. WebSocket 전송에 실패할 수 있습니다.")
 
     for ws in list(active_clients):
         try:
@@ -99,65 +99,15 @@ def broadcast():
             log.error(f"웹소켓 전송 실패: {e}")
 
 
-async def binance_worker():
-    """Binance 포지션 + markPrice 실시간 업데이트"""
-    global loop
-    loop = asyncio.get_running_loop()  # ✅ 현재 이벤트 루프 저장
+async def refresh_positions_periodic(interval_sec: int = 3):
+    """주기적으로 REST 스냅샷을 갱신해서 닫힌 포지션 제거 및 구독 집합 동기화"""
+    global last_positions, last_mark_prices, subscribed_symbols
 
-    client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
-
-    # 스냅샷: 모든 열린 포지션 가져오기
-    all_positions = await client.futures_position_information()
-    account_info = await client.futures_account()
-    await client.close_connection()
-
-    margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
-    margin_type_map = {p["symbol"]: p.get("marginType") for p in account_info["positions"]}
-
-    # 열린 포지션만 저장
-    for pos in all_positions:
-        try:
-            amt = float(pos.get("positionAmt") or 0)
-        except Exception:
-            amt = 0.0
-
-        if amt != 0:
-            symbol = pos["symbol"]
-            norm = normalize_position(pos)
-            norm["iw"] = margin_map.get(symbol)
-            norm["mt"] = margin_type_map.get(symbol)
-            last_positions[symbol] = norm
-
-    if not last_positions:
-        log.info("열린 포지션이 없습니다.")
-        # ✅ 그래도 리프레시 태스크는 계속 돌려서 이후에 열리면 반영되도록
-        asyncio.create_task(refresh_positions_periodic())
-        return
-
-    # ✅ 주기적 스냅샷 갱신 태스크 시작 (닫힌 포지션 자동 제거)
-    asyncio.create_task(refresh_positions_periodic())
-
-    # ✅ markPrice 스트림 (모든 심볼 수신)
-    url_mark = "wss://fstream.binance.com/ws/!markPrice@arr@1s"
-    async with websockets.connect(url_mark, ping_interval=20, ping_timeout=20) as ws:
-        log.info(f"실시간 markPrice 수신 시작 (심볼 수: {len(last_positions)})")
-        while True:
-            raw = await ws.recv()
-            data = json.loads(raw)
-            if isinstance(data, list):
-                for item in data:
-                    sym = item.get("s")
-                    if item.get("e") == "markPriceUpdate" and sym in last_positions:
-                        last_mark_prices[sym] = item["p"]
-                broadcast()
-
-
-async def refresh_positions_periodic(interval_sec: int = 5):
-    """✅ 주기적으로 REST 스냅샷을 갱신해서 닫힌 포지션 제거"""
-    global last_positions, last_mark_prices
     while True:
         try:
             client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
+
+            # 전체 포지션 + 계정 정보
             all_positions = await client.futures_position_information()
             account_info = await client.futures_account()
             await client.close_connection()
@@ -165,11 +115,10 @@ async def refresh_positions_periodic(interval_sec: int = 5):
             margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
             margin_type_map = {p["symbol"]: p.get("marginType") for p in account_info["positions"]}
 
-            # 새로 열린/유지된 포지션만 담을 임시 맵
             updated = {}
 
             for pos in all_positions:
-                symbol = pos["symbol"]
+                sym = pos["symbol"]  # 예: PEPEUSDT
                 try:
                     amt = float(pos.get("positionAmt") or 0)
                 except Exception:
@@ -177,20 +126,26 @@ async def refresh_positions_periodic(interval_sec: int = 5):
 
                 if amt != 0:
                     norm = normalize_position(pos)
-                    norm["iw"] = margin_map.get(symbol)
-                    norm["mt"] = margin_type_map.get(symbol)
-                    updated[symbol] = norm
+                    norm["iw"] = margin_map.get(sym)
+                    norm["mt"] = margin_type_map.get(sym)
+                    updated[sym] = norm
 
-            # ✅ 닫힌 포지션 제거 + 상태 업데이트
-            # 삭제 대상: 기존에는 있었는데 updated에는 없는 심볼
+            # 닫힌 포지션 제거
             to_remove = set(last_positions.keys()) - set(updated.keys())
             for sym in to_remove:
                 last_positions.pop(sym, None)
-                last_mark_prices.pop(sym, None)  # 마크프라이스도 같이 제거
+                last_mark_prices.pop(sym, None)
 
-            # 유지/추가 대상 업데이트
+            # 열린/유지 포지션 업데이트
             for sym, norm in updated.items():
                 last_positions[sym] = norm
+
+            # ✅ 구독 집합 동기화: 열린 포지션 심볼만 구독
+            new_set = set(last_positions.keys())
+            if new_set != subscribed_symbols:
+                subscribed_symbols = new_set
+                symbols_changed.set()  # 스트림 재구성 요청
+                log.info(f"구독 심볼 변경: {new_set}")
 
             broadcast()
 
@@ -200,16 +155,84 @@ async def refresh_positions_periodic(interval_sec: int = 5):
         await asyncio.sleep(interval_sec)
 
 
+async def mark_price_stream():
+    """심볼별 합친 스트림으로 마크프라이스 수신. 구독 집합 변경 시 재연결."""
+    backoff = 1
+
+    async def build_stream_url(symbols):
+        # 심볼 없으면 전체 arr 스트림 사용 (유휴 상태)
+        if not symbols:
+            return "wss://fstream.binance.com/ws/!markPrice@arr@1s"
+        streams = [f"{sym.lower()}@markPrice@1s" for sym in symbols]
+        joined = "/".join(streams)
+        return f"wss://fstream.binance.com/stream?streams={joined}"
+
+    while True:
+        try:
+            # 현재 구독 집합 확인 및 이벤트 리셋
+            current = set(subscribed_symbols)
+            symbols_changed.clear()
+
+            url = await build_stream_url(current)
+            async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
+                log.info(f"마크프라이스 수신 시작 (구독 {len(current)}개): {current or 'ALL'}")
+                backoff = 1
+
+                while True:
+                    # 구독 변경 이벤트가 오면 재연결하여 재구독
+                    if symbols_changed.is_set():
+                        log.info("구독 변경 감지 → 스트림 재구성")
+                        break
+
+                    raw = await ws.recv()
+                    data = json.loads(raw)
+
+                    updated = False
+
+                    # 합친 스트림 형태: dict(payload.data)
+                    if isinstance(data, dict) and "data" in data:
+                        item = data["data"]
+                        if item.get("e") == "markPriceUpdate":
+                            sym = item.get("s")
+                            if sym in last_positions:
+                                last_mark_prices[sym] = item.get("p")
+                                updated = True
+
+                    # arr 스트림: list의 각 item
+                    elif isinstance(data, list):
+                        for item in data:
+                            if item.get("e") == "markPriceUpdate":
+                                sym = item.get("s")
+                                if sym in last_positions:
+                                    last_mark_prices[sym] = item.get("p")
+                                    updated = True
+
+                    if updated:
+                        broadcast()
+
+        except Exception as e:
+            log.error(f"markPrice 스트림 오류, 재시도: {e}")
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 30)
+
+
+async def binance_start():
+    """백그라운드 태스크를 올려 Bitget 스타일로 동작"""
+    # 포지션 리프레시 + 스트림 병행
+    asyncio.create_task(refresh_positions_periodic(interval_sec=3))
+    asyncio.create_task(mark_price_stream())
+
+
 @router.websocket("/ws/binance")
 async def positions_ws(websocket: WebSocket):
     global loop
     await websocket.accept()
     active_clients.add(websocket)
-    loop = asyncio.get_running_loop()  # ✅ 웹소켓 연결 시에도 루프 설정 보강
+    loop = asyncio.get_running_loop()
     log.info(f"🌐 Binance 클라이언트 연결됨: {websocket.client}")
 
-    if last_positions:
-        broadcast()
+    # 최초 상태 푸시
+    broadcast()
 
     try:
         while True:
