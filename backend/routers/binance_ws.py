@@ -102,12 +102,9 @@ def broadcast():
 
     # ✅ 통합 브로드캐스트도 호출
     try:
-        from backend.routers import unified_ws
         unified_ws.broadcast()
     except Exception:
         pass
-
-
 
 
 async def refresh_positions_periodic(interval_sec: int = 3):
@@ -158,6 +155,7 @@ async def refresh_positions_periodic(interval_sec: int = 3):
                 symbols_changed.set()  # 스트림 재구성 요청
                 log.info(f"구독 심볼 변경: {new_set}")
 
+            # ✅ 변경사항 브로드캐스트 (포지션이 모두 닫혔을 때도 메시지 내려감)
             broadcast()
 
         except Exception as e:
@@ -247,6 +245,7 @@ async def positions_ws(websocket: WebSocket):
 
     try:
         while True:
+           
             await asyncio.sleep(10)
     except WebSocketDisconnect:
         log.info(f"🔌 Binance 클라이언트 연결 해제: {websocket.client}")
