@@ -1,145 +1,161 @@
 import os, json, asyncio, logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
+from binance import ThreadedWebsocketManager, Client
 from pybitget.stream import BitgetWsClient, handel_error, SubscribeReq
 
-router = APIRouter()
+app = FastAPI()
+log = logging.getLogger("positions")
+
+# 상태 저장소
 active_clients = set()
-loop = None
-last_positions = {}         # {(instId, side): pos}
-last_mark_prices = {}
-pos_to_base = {}            # (instId, side) → ticker 심볼 매핑
-subscribed_symbols = set()  # ticker 채널에 구독한 심볼(PEPEUSDT 등)
+loop = asyncio.get_event_loop()
 
-log = logging.getLogger("positions-ticker")
+# Bitget
+last_positions_bitget = {}
+last_mark_prices_bitget = {}
+pos_to_base = {}
+subscribed_symbols = set()
 
-# .env 로드
+# Binance
+positions_binance = {}
+mark_prices_binance = {}
+
+# 환경변수
 load_dotenv()
-API_KEY = os.getenv("BITGET_API_KEY")
-API_SECRET = os.getenv("BITGET_API_SECRET")
-API_PASS = os.getenv("BITGET_API_PASS")
-
-if not all([API_KEY, API_SECRET, API_PASS]):
-    raise RuntimeError("환경변수 BITGET_API_KEY, BITGET_API_SECRET, BITGET_API_PASS 를 설정하세요.")
+BITGET_KEY = os.getenv("BITGET_API_KEY")
+BITGET_SECRET = os.getenv("BITGET_API_SECRET")
+BITGET_PASS = os.getenv("BITGET_API_PASS")
+BINANCE_KEY = os.getenv("BINANCE_API_KEY")
+BINANCE_SECRET = os.getenv("BINANCE_API_SECRET")
 
 # Bitget WebSocket 클라이언트
 bitget_ws = (
-    BitgetWsClient(
-        api_key=API_KEY,
-        api_secret=API_SECRET,
-        passphrase=API_PASS,
-        verbose=True,
-    )
+    BitgetWsClient(api_key=BITGET_KEY, api_secret=BITGET_SECRET, passphrase=BITGET_PASS)
     .error_listener(handel_error)
     .build()
 )
 
+# Binance REST + WS 클라이언트
+binance_client = Client(BINANCE_KEY, BINANCE_SECRET)
+
 def broadcast():
-    """포지션 + markPrice + 실시간 UPL 합쳐서 브로드캐스트"""
     merged = []
-    for (pos_symbol, side), pos in last_positions.items():
+
+    # Bitget 포지션
+    for (pos_symbol, side), pos in last_positions_bitget.items():
         base_symbol = pos_to_base.get((pos_symbol, side))
-        mark_price = last_mark_prices.get(base_symbol)
-
-        # upl 실시간 계산
-        upl = None
-        try:
-            entry = float(pos.get("averageOpenPrice", 0))
-            size = float(pos.get("total", 0))
-            if mark_price and entry and size:
-                mark = float(mark_price)
-                if side == "long":
-                    upl = (mark - entry) * size
-                elif side == "short":
-                    upl = (entry - mark) * size
-        except Exception as e:
-            log.error(f"UPL 계산 오류: {e}")
-
+        mark_price = last_mark_prices_bitget.get(base_symbol)
         merged.append({
-            "symbol": pos_symbol,   # 예: PEPEUSDT_UMCBL
+            "source": "bitget",
+            "symbol": pos_symbol,
             "side": side,
             "size": pos.get("total"),
-            "upl": upl if upl is not None else pos.get("upl"),
             "entryPrice": pos.get("averageOpenPrice"),
             "markPrice": mark_price,
+            "upl": pos.get("upl"),
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
         })
 
-    if not merged:
-        merged = {"msg": "현재 열린 포지션이 없습니다."}
+    # Binance 포지션
+    for symbol, pos in positions_binance.items():
+        mark_price = mark_prices_binance.get(symbol)
+        merged.append({
+            "source": "binance",
+            "symbol": symbol,
+            "side": pos.get("ps"),
+            "size": pos.get("pa"),
+            "entryPrice": pos.get("ep"),
+            "markPrice": mark_price,
+            "upl": pos.get("up"),
+            "liqPrice": pos.get("l", None),
+            "marginType": pos.get("mt"),
+        })
 
     for ws in list(active_clients):
         asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
 
-def on_message(message: str):
-    global last_positions, last_mark_prices, subscribed_symbols, pos_to_base
-    try:
-        data = json.loads(message)
-        arg = data.get("arg", {})
-        channel = arg.get("channel")
-        payload = data.get("data", [])
+# Bitget 메시지 핸들러
+def on_bitget_message(message: str):
+    data = json.loads(message)
+    arg = data.get("arg", {})
+    channel = arg.get("channel")
+    payload = data.get("data", [])
 
-        # ✅ 포지션 채널
-        if channel == "positions":
-            current_keys = set()
-            for pos in payload:
-                instId = pos["instId"]              # 예: "PEPEUSDT_UMCBL"
-                base_symbol = instId.split("_")[0]  # "PEPEUSDT"
-                side = pos["holdSide"]              # "long" 또는 "short"
+    if channel == "positions":
+        for pos in payload:
+            instId = pos["instId"]
+            base_symbol = instId.split("_")[0]
+            side = pos["holdSide"]
+            key = (instId, side)
+            last_positions_bitget[key] = pos
+            pos_to_base[key] = base_symbol
+            if base_symbol not in subscribed_symbols:
+                bitget_ws.subscribe([SubscribeReq("mc", "ticker", base_symbol)], on_bitget_message)
+                subscribed_symbols.add(base_symbol)
+        broadcast()
 
-                key = (instId, side)
-                last_positions[key] = pos
-                pos_to_base[key] = base_symbol
-                current_keys.add(key)
+    elif channel == "ticker":
+        for t in payload:
+            instId = t["instId"]
+            last_mark_prices_bitget[instId] = t.get("markPrice")
+        broadcast()
 
-                # 새 심볼이면 ticker 채널 구독
-                if base_symbol not in subscribed_symbols:
-                    bitget_ws.subscribe(
-                        [SubscribeReq("mc", "ticker", base_symbol)], on_message
-                    )
-                    subscribed_symbols.add(base_symbol)
+# Binance 핸들러
+def handle_user_data(msg):
+    if msg.get("e") == "ACCOUNT_UPDATE":
+        for pos in msg["a"]["P"]:
+            symbol = pos["s"]
+            if float(pos["pa"]) != 0:
+                positions_binance[symbol] = pos
+            else:
+                positions_binance.pop(symbol, None)
+        broadcast()
 
-            # 사라진 포지션 제거
-            removed = {k for k in list(last_positions) if k not in current_keys}
-            for key in removed:
-                base_symbol = pos_to_base.pop(key, None)
-                last_positions.pop(key, None)
-                # ticker 구독 해제는 심볼 단위로만
-                if base_symbol and base_symbol in subscribed_symbols:
-                    # 다른 방향 포지션이 남아있으면 유지
-                    still_has = any(bs == base_symbol for bs in pos_to_base.values())
-                    if not still_has:
-                        bitget_ws.unsubscribe(
-                            [SubscribeReq("mc", "ticker", base_symbol)], on_message
-                        )
-                        subscribed_symbols.remove(base_symbol)
-                        last_mark_prices.pop(base_symbol, None)
+def handle_mark_price(msg):
+    if msg.get("e") == "markPriceUpdate":
+        symbol = msg["s"]
+        mark_prices_binance[symbol] = msg["p"]
+        broadcast()
 
-            broadcast()
+# Binance 초기 스냅샷
+def load_initial_positions():
+    all_positions = binance_client.futures_position_information()
+    for pos in all_positions:
+        if float(pos["positionAmt"]) != 0:
+            positions_binance[pos["symbol"]] = {
+                "s": pos["symbol"],
+                "pa": pos["positionAmt"],
+                "ep": pos["entryPrice"],
+                "up": pos["unRealizedProfit"],
+                "ps": pos["positionSide"],
+                "mt": pos["marginType"],
+                "l": pos["liquidationPrice"],
+            }
 
-        # ✅ ticker 채널 (markPrice 포함)
-        elif channel == "ticker":
-            for t in payload:
-                instId = t["instId"]  # 예: "PEPEUSDT"
-                last_mark_prices[instId] = t.get("markPrice")
-            broadcast()
+# Binance WebSocket 시작
+def start_binance_ws():
+    twm = ThreadedWebsocketManager(api_key=BINANCE_KEY, api_secret=BINANCE_SECRET)
+    twm.start()
+    twm.start_futures_user_socket(callback=handle_user_data)
+    twm.start_symbol_mark_price_socket(symbol="BTCUSDT", callback=handle_mark_price, fast=True)
+    twm.start_symbol_mark_price_socket(symbol="ETHUSDT", callback=handle_mark_price, fast=True)
+    return twm
 
-    except Exception as e:
-        log.error(f"메시지 파싱 오류: {e}", exc_info=True)
-
-@router.websocket("/ws/positions")
+# FastAPI WebSocket 엔드포인트
+@app.websocket("/ws/positions")
 async def positions_ws(websocket: WebSocket):
     await websocket.accept()
     active_clients.add(websocket)
-    log.info(f"🌐 클라이언트 연결됨: {websocket.client}")
-
-    if last_positions:
+    if positions_binance or last_positions_bitget:
         broadcast()
-
     try:
         while True:
             await asyncio.sleep(10)
     except WebSocketDisconnect:
-        log.info(f"🔌 클라이언트 연결 해제: {websocket.client}")
         active_clients.discard(websocket)
+
+# 실행 시 초기화
+load_initial_positions()
+twm = start_binance_ws()
