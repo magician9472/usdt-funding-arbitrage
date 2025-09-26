@@ -16,24 +16,7 @@ log = logging.getLogger("positions-sub")
 
 # .env 로드
 load_dotenv()
-API_KEY = os.getenv("BITGET_API_KEY")
-API_SECRET = os.getenv("BITGET_API_SECRET")
-API_PASS = os.getenv("BITGET_API_PASS")
 
-if not all([API_KEY, API_SECRET, API_PASS]):
-    raise RuntimeError("환경변수 BITGET_API_KEY, BITGET_API_SECRET, BITGET_API_PASS 를 설정하세요.")
-
-# Bitget WebSocket 클라이언트 생성
-bitget_ws = (
-    BitgetWsClient(
-        api_key=API_KEY,
-        api_secret=API_SECRET,
-        passphrase=API_PASS,
-        verbose=True,
-    )
-    .error_listener(handel_error)
-    .build()
-)
 
 # 메시지 콜백
 def on_message(message: str):
@@ -63,17 +46,45 @@ def on_message(message: str):
 # FastAPI 시작 시 Bitget 구독 시작
 @router.on_event("startup")
 async def startup_event():
-    global loop
+    load_dotenv()
+    api_key = os.getenv("BITGET_API_KEY")
+    secret  = os.getenv("BITGET_API_SECRET")
+    passwd  = os.getenv("BITGET_API_PASS")
+    if not all([api_key, secret, passwd]):
+        raise RuntimeError("환경변수 BITGET_API_KEY/SECRET/PASS 설정 필요")
+
+    global loop, bitget_ws
     loop = asyncio.get_running_loop()
+
+    bitget_ws = BitgetWsClient(
+        api_key=api_key,
+        api_secret=secret,
+        passphrase=passwd,
+        # 중요: private 채널이면 True
+        is_private=True,
+        # 필요 시 멀티 스레드 off 등 옵션 확인
+    )
+
     channels = [SubscribeReq("umcbl", "positions", "default")]
     bitget_ws.subscribe(channels, on_message)
     log.info("Bitget positions 구독 시작")
+
 
 # WebSocket 엔드포인트
 @router.websocket("/ws/positions")
 async def positions_ws(websocket: WebSocket):
     await websocket.accept()
     active_clients.add(websocket)
+
+    # ▶ 테스트 메시지: 접속 즉시 무조건 한 줄 쏘기
+    try:
+        await websocket.send_text(json.dumps({
+            "_test": "hello",
+            "ts": __import__("time").time()
+        }))
+    except Exception as e:
+        log.exception("initial send error: %s", e)
+
     try:
         while True:
             await asyncio.sleep(10)  # keep-alive
