@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>통합 포지션 대시보드</title>
+  <link rel="stylesheet" href="/static/css/unified_ws.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>통합 포지션 대시보드</h1>
+    <div class="status">
+      <span id="connection-status" class="badge badge-warning">연결 중...</span>
+      <span class="hint">Endpoint: /ws/positions/all</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <table class="positions-table">
+      <thead>
+        <tr>
+          <th>거래소</th>
+          <th>심볼</th>
+          <th>방향</th>
+          <th>Size</th>
+          <th>PNL</th>
+          <th>Entry Price</th>
+          <th>Mark Price</th>
+          <th>Liq. Price</th>
+          <th>Margin</th>
+        </tr>
+      </thead>
+      <tbody id="positions-body">
+        <tr class="placeholder">
+          <td colspan="9">데이터를 기다리는 중...</td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+
+  <footer class="footer">
+    <span>© 통합 포지션 뷰</span>
+  </footer>
+
+  <script src="/static/js/unified_ws.js"></script>
+</body>
+</html>

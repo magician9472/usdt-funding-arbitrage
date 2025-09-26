@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
-from backend.routers import api, views, private_api, order_api, ws_router, binance_ws
+from backend.routers import api, views, private_api, order_api, ws_router, binance_ws, unified_ws
 from backend.update_task import update_loop
 from pybitget.stream import SubscribeReq
 
@@ -50,6 +50,8 @@ app.include_router(private_api.router, prefix="/api")
 app.include_router(order_api.router, prefix="/api")
 app.include_router(ws_router.router)
 app.include_router(binance_ws.router)
+app.include_router(unified_ws.router)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

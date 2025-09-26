@@ -36,3 +36,7 @@ async def positions_page(request: Request):
 @router.get("/binance_ws", response_class=HTMLResponse)
 async def binance_ws_page(request: Request):
     return templates.TemplateResponse("binance_ws.html", {"request": request})
+
+@router.get("/unified_ws", response_class=HTMLResponse)
+async def unified_ws_page(request: Request):
+    return templates.TemplateResponse("unified_ws.html", {"request": request})

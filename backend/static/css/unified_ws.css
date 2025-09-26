@@ -1,0 +1,63 @@
+:root {
+  --bg: #0b0e13;
+  --panel: #131824;
+  --text: #e6e9ef;
+  --muted: #9aa3b2;
+  --green: #2ecc71;
+  --red: #e74c3c;
+  --yellow: #f1c40f;
+  --blue: #3498db;
+  --border: #1f2533;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.header h1 { margin: 0; font-size: 18px; }
+.status { display: flex; gap: 12px; align-items: center; }
+.hint { color: var(--muted); font-size: 12px; }
+
+.badge {
+  display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+}
+.badge-success { background: rgba(46, 204, 113, 0.15); color: var(--green); border: 1px solid rgba(46, 204, 113, 0.4); }
+.badge-warning { background: rgba(241, 196, 15, 0.15); color: var(--yellow); border: 1px solid rgba(241, 196, 15, 0.4); }
+.badge-danger  { background: rgba(231, 76, 60, 0.15); color: var(--red); border: 1px solid rgba(231, 76, 60, 0.4); }
+
+.container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+
+.positions-table {
+  width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.positions-table thead th {
+  text-align: left; padding: 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border);
+}
+.positions-table tbody td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.positions-table tbody tr:last-child td { border-bottom: none; }
+
+.exchange-badge {
+  display: inline-block; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600;
+}
+.exchange-binance { background: rgba(241, 196, 15, 0.12); color: var(--yellow); border: 1px solid rgba(241, 196, 15, 0.35); }
+.exchange-bitget  { background: rgba(52, 152, 219, 0.12); color: var(--blue); border: 1px solid rgba(52, 152, 219, 0.35); }
+
+.side-long { color: var(--green); font-weight: 700; }
+.side-short { color: var(--red); font-weight: 700; }
+.pnl-pos { color: var(--green); }
+.pnl-neg { color: var(--red); }
+.muted { color: var(--muted); }
+
+.placeholder td {
+  color: var(--muted); text-align: center; padding: 20px;
+}
+
+.footer {
+  padding: 16px 20px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border);
+  max-width: 1100px; margin: 24px auto; background: transparent;
+}
