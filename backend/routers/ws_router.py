@@ -69,9 +69,9 @@ def on_message(message: str):
                     last_positions[pos["instId"]] = pos
             broadcast()
 
-        elif channel == "markPrice":
-            for mp in payload:
-                last_mark_prices[mp["instId"]] = mp["markPrice"]
+        elif channel == "ticker":
+            for t in payload:
+                last_mark_prices[t["instId"]] = t["markPrice"]
             broadcast()
 
     except Exception as e:
