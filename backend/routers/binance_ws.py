@@ -26,12 +26,11 @@ if not all([BINANCE_KEY, BINANCE_SECRET]):
 def normalize_position(pos: dict):
     """REST 포지션 데이터를 짧은 키로 맞춤"""
     return {
-        "pa": pos.get("positionAmt"),
-        "ep": pos.get("entryPrice"),
-        "up": pos.get("unRealizedProfit"),
-        "ps": pos.get("positionSide"),
-        "l": pos.get("liquidationPrice"),
-        "im": pos.get("isolatedMargin"),  # margin 금액 (스냅샷 시점)
+        "pa": pos.get("positionAmt"),       # position amount
+        "ep": pos.get("entryPrice"),        # entry price
+        "up": pos.get("unRealizedProfit"),  # unrealized PnL
+        "l": pos.get("liquidationPrice"),   # liquidation price
+        "im": pos.get("isolatedMargin"),    # isolated margin (스냅샷 시점만)
     }
 
 
@@ -43,6 +42,15 @@ def broadcast():
         entry = float(pos.get("ep", 0) or 0)
         size = float(pos.get("pa", 0) or 0)
         upl = pos.get("up")
+
+        # ✅ 포지션 방향 계산 (positionAmt 부호 기준)
+        if size > 0:
+            side = "LONG"
+        elif size < 0:
+            side = "SHORT"
+        else:
+            side = "FLAT"
+
         try:
             if mark and entry and size:
                 m = float(mark)
@@ -56,13 +64,13 @@ def broadcast():
         merged.append({
             "exchange": "binance",
             "symbol": symbol,
-            "side": pos.get("ps"),
+            "side": side,             # ← positionAmt 기준으로 계산된 방향
             "size": size,
             "upl": upl,
             "entryPrice": entry,
             "markPrice": mark,
             "liqPrice": pos.get("l"),
-            "margin": pos.get("im"),   # isolatedMargin 값
+            "margin": pos.get("im"),  # isolatedMargin (스냅샷 시점)
         })
 
     if not merged:
