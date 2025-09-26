@@ -1,7 +1,5 @@
-import json, asyncio, logging
+import os, json, asyncio, logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pybitget.stream import BitgetWsClient, SubscribeReq, handel_error
-import os
 from dotenv import load_dotenv
 from pybitget.stream import BitgetWsClient, handel_error
 
@@ -11,13 +9,16 @@ loop = None
 
 log = logging.getLogger("positions-sub")
 
-
-
+# .env 로드
 load_dotenv()
 API_KEY = os.getenv("BITGET_API_KEY")
 API_SECRET = os.getenv("BITGET_API_SECRET")
 API_PASS = os.getenv("BITGET_API_PASS")
 
+if not all([API_KEY, API_SECRET, API_PASS]):
+    raise RuntimeError("환경변수 BITGET_API_KEY, BITGET_API_SECRET, BITGET_API_PASS 를 설정하세요.")
+
+# Bitget WebSocket 클라이언트 (인증 포함)
 bitget_ws = (
     BitgetWsClient(
         api_key=API_KEY,
@@ -38,12 +39,20 @@ def on_message(message: str):
             payload = data.get("data", [])
             if not payload:
                 for ws in list(active_clients):
-                    asyncio.run_coroutine_threadsafe(
-                        ws.send_json({"msg": "현재 열린 포지션이 없습니다."}), loop
-                    )
+                    try:
+                        asyncio.run_coroutine_threadsafe(
+                            ws.send_json({"msg": "현재 열린 포지션이 없습니다."}), loop
+                        )
+                    except Exception as e:
+                        log.error(f"❌ send_json error (no position): {e}")
+                        active_clients.discard(ws)
                 return
             for ws in list(active_clients):
-                asyncio.run_coroutine_threadsafe(ws.send_json(payload), loop)
+                try:
+                    asyncio.run_coroutine_threadsafe(ws.send_json(payload), loop)
+                except Exception as e:
+                    log.error(f"❌ send_json error (with data): {e}")
+                    active_clients.discard(ws)
     except Exception as e:
         log.error(f"메시지 파싱 오류: {e}", exc_info=True)
 
