@@ -1,32 +1,33 @@
-// /static/js/positions.js
-(() => {
-  const log = (...args) => console.log("[positions]", ...args);
+const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+const ws = new WebSocket(protocol + window.location.host + "/ws/positions");
 
-  const ws = new WebSocket(`wss://${location.host}/ws/positions`);
-  ws.onopen = () => log("✅ WebSocket 연결 성공");
-  ws.onerror = (e) => console.error("WS error", e);
-  ws.onclose = () => log("WS closed");
+ws.onopen = () => {
+  console.log("✅ WebSocket 연결 성공");
+  const li = document.createElement("li");
+  li.innerText = "✅ WebSocket 연결 성공";
+  li.style.color = "blue";
+  document.getElementById("positions").appendChild(li);
+};
 
-  ws.onmessage = (evt) => {
-    log("FROM SERVER >>>", evt.data);
-    try {
-      const data = JSON.parse(evt.data);
-      // _test 메시지
-      if (data && data._test) return;
+ws.onmessage = (event) => {
+  let data = JSON.parse(event.data);
+  const list = document.getElementById("positions");
+  list.innerHTML = "";
 
-      // 포지션 없음 안내
-      if (data && data.msg) {
-        // 화면에 안내문 갱신
-        return;
-      }
+  if (data.msg) {
+    const li = document.createElement("li");
+    li.innerText = data.msg;
+    li.style.color = "gray";
+    list.appendChild(li);
+    return;
+  }
 
-      // payload 배열 렌더
-      if (Array.isArray(data)) {
-        // 예: data: [{ instId, holdSide, total, ... }, ...]
-        // TODO: DOM 업데이트
-      }
-    } catch (e) {
-      // 문자열이면 통과
-    }
-  };
-})();
+  if (!Array.isArray(data)) data = [data];
+
+  data.forEach(pos => {
+    const li = document.createElement("li");
+    li.style.color = pos.holdSide === "long" ? "green" : "red";
+    li.innerText = `${pos.instId} | ${pos.holdSide?.toUpperCase()} | 수량: ${pos.total}`;
+    list.appendChild(li);
+  });
+};
