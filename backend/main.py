@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
     # 여러 채널 동시에 구독
     channels = [
         SubscribeReq("umcbl", "positions", "default"),
-        SubscribeReq("umcbl", "markPrice", "default"),
+        SubscribeReq("umcbl", "ticker", "default"),
     ]
     ws_router.bitget_ws.subscribe(channels, ws_router.on_message)
     print("🚀 Bitget positions + markPrice 구독 시작")
