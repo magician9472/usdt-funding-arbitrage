@@ -25,7 +25,7 @@ if not all([BINANCE_KEY, BINANCE_SECRET]):
 def normalize_position(pos: dict):
     """REST 포지션 데이터를 짧은 키로 맞춤"""
     return {
-        "pa": pos.get("positionAmt"),        # position amount
+        "pa": pos.get("positionAmt"),        # position amount (string)
         "ep": pos.get("entryPrice"),         # entry price
         "up": pos.get("unRealizedProfit"),   # unrealized PnL
         "l": pos.get("liquidationPrice"),    # liquidation price
@@ -39,11 +39,21 @@ def broadcast():
     merged = []
     for symbol, pos in last_positions.items():
         mark = last_mark_prices.get(symbol)
-        entry = float(pos.get("ep", 0) or 0)
-        size = float(pos.get("pa", 0) or 0)
+
+        # positionAmt → float 변환 (부호 유지)
+        try:
+            size = float(pos.get("pa") or 0)
+        except Exception:
+            size = 0.0
+
+        try:
+            entry = float(pos.get("ep") or 0)
+        except Exception:
+            entry = 0.0
+
         upl = pos.get("up")
 
-        # 방향 계산
+        # ✅ 방향 계산 (부호 기준)
         if size > 0:
             side = "LONG"
         elif size < 0:
@@ -51,6 +61,7 @@ def broadcast():
         else:
             side = "FLAT"
 
+        # ✅ UPL 재계산 (markPrice 기반)
         try:
             if mark and entry and size:
                 m = float(mark)
@@ -95,7 +106,12 @@ async def binance_worker():
 
     # 열린 포지션만 저장
     for pos in all_positions:
-        if float(pos.get("positionAmt", 0) or 0) != 0:
+        try:
+            amt = float(pos.get("positionAmt") or 0)
+        except Exception:
+            amt = 0.0
+
+        if amt != 0:
             symbol = pos["symbol"]
             norm = normalize_position(pos)
             norm["iw"] = margin_map.get(symbol)
