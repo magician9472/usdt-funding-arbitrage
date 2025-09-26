@@ -1,54 +1,32 @@
-const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-const ws = new WebSocket(protocol + window.location.host + "/ws/positions");
+// /static/js/positions.js
+(() => {
+  const log = (...args) => console.log("[positions]", ...args);
 
-ws.onopen = () => {
-  console.log("✅ WebSocket 연결 성공");
-  const li = document.createElement("li");
-  li.innerText = "✅ WebSocket 연결 성공";
-  li.style.color = "blue";
-  document.getElementById("positions").appendChild(li);
-};
+  const ws = new WebSocket(`wss://${location.host}/ws/positions`);
+  ws.onopen = () => log("✅ WebSocket 연결 성공");
+  ws.onerror = (e) => console.error("WS error", e);
+  ws.onclose = () => log("WS closed");
 
-ws.onmessage = (event) => {
-  console.log("FROM SERVER >>>", event.data);
+  ws.onmessage = (evt) => {
+    log("FROM SERVER >>>", evt.data);
+    try {
+      const data = JSON.parse(evt.data);
+      // _test 메시지
+      if (data && data._test) return;
 
-  let data;
-  try {
-    data = JSON.parse(event.data);
-  } catch (e) {
-    console.error("❌ JSON 파싱 오류:", e);
-    return;
-  }
+      // 포지션 없음 안내
+      if (data && data.msg) {
+        // 화면에 안내문 갱신
+        return;
+      }
 
-  const list = document.getElementById("positions");
-  list.innerHTML = "";
-
-  // 포지션 없음 메시지 처리
-  if (data.msg) {
-    const li = document.createElement("li");
-    li.innerText = data.msg;
-    li.style.color = "gray";
-    list.appendChild(li);
-    return;
-  }
-
-  // 배열/단일 객체 모두 대응
-  if (!Array.isArray(data)) {
-    data = [data];
-  }
-
-  data.forEach(pos => {
-    const li = document.createElement("li");
-    li.style.color = pos.holdSide === "long" ? "green" : "red";
-    li.innerText = `${pos.instId} | ${pos.holdSide?.toUpperCase()} | 수량: ${pos.total}`;
-    list.appendChild(li);
-  });
-};
-
-ws.onerror = (err) => {
-  console.error("❌ WebSocket 에러:", err);
-};
-
-ws.onclose = () => {
-  console.log("❌ WebSocket 연결 종료");
-};
+      // payload 배열 렌더
+      if (Array.isArray(data)) {
+        // 예: data: [{ instId, holdSide, total, ... }, ...]
+        // TODO: DOM 업데이트
+      }
+    } catch (e) {
+      // 문자열이면 통과
+    }
+  };
+})();
