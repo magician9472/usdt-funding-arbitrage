@@ -2,6 +2,7 @@ import os, json, asyncio, logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
 from pybitget.stream import BitgetWsClient, handel_error, SubscribeReq
+from backend.routers import unified_ws 
 
 router = APIRouter()
 active_clients = set()
@@ -71,6 +72,14 @@ def broadcast():
 
     for ws in list(active_clients):
         asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
+    
+    try:
+        unified_ws.broadcast()
+    except Exception as e:
+        log.error(f"통합 브로드캐스트 호출 실패: {e}")
+
+
+
 
 def on_message(message: str):
     global last_positions, last_mark_prices, subscribed_symbols, pos_to_base

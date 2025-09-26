@@ -2,6 +2,7 @@ import os, asyncio, json, logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
 from binance import AsyncClient
+from backend.routers import unified_ws
 import websockets
 
 router = APIRouter()
@@ -97,6 +98,13 @@ def broadcast():
             asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
         except Exception as e:
             log.error(f"웹소켓 전송 실패: {e}")
+
+            
+    try:
+        unified_ws.broadcast()
+    except Exception as e:
+        log.error(f"통합 브로드캐스트 호출 실패: {e}")
+
 
 
 async def refresh_positions_periodic(interval_sec: int = 3):

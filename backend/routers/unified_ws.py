@@ -112,8 +112,9 @@ async def unified_positions_ws(websocket: WebSocket):
     await websocket.send_json(merged)
 
     try:
+        # 별도의 sleep 루프는 필요 없음 → 연결만 유지
         while True:
-            await asyncio.sleep(10)
+            await asyncio.sleep(60)
     except WebSocketDisconnect:
         log.info(f"🔌 통합 클라이언트 해제: {websocket.client}")
         active_clients.discard(websocket)
