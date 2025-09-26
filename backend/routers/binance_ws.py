@@ -6,7 +6,7 @@ import websockets
 
 router = APIRouter()
 active_clients = set()
-loop = None
+loop = None  # ✅ run_coroutine_threadsafe에 사용할 이벤트 루프
 
 last_positions = {}        # {symbol: pos}
 last_mark_prices = {}      # {symbol: markPrice}
@@ -88,12 +88,22 @@ def broadcast():
     if not merged:
         merged = [{"msg": "현재 열린 포지션이 없습니다."}]
 
+    # ✅ 이벤트 루프 설정 확인
+    if loop is None:
+        log.warning("이벤트 루프가 설정되지 않았습니다. WebSocket에 전송하지 못할 수 있습니다.")
+
     for ws in list(active_clients):
-        asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
+        try:
+            asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
+        except Exception as e:
+            log.error(f"웹소켓 전송 실패: {e}")
 
 
 async def binance_worker():
     """Binance 포지션 + markPrice 실시간 업데이트"""
+    global loop
+    loop = asyncio.get_running_loop()  # ✅ 현재 이벤트 루프 저장
+
     client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
 
     # 스냅샷: 모든 열린 포지션 가져오기
@@ -120,7 +130,12 @@ async def binance_worker():
 
     if not last_positions:
         log.info("열린 포지션이 없습니다.")
+        # ✅ 그래도 리프레시 태스크는 계속 돌려서 이후에 열리면 반영되도록
+        asyncio.create_task(refresh_positions_periodic())
         return
+
+    # ✅ 주기적 스냅샷 갱신 태스크 시작 (닫힌 포지션 자동 제거)
+    asyncio.create_task(refresh_positions_periodic())
 
     # ✅ markPrice 스트림 (모든 심볼 수신)
     url_mark = "wss://fstream.binance.com/ws/!markPrice@arr@1s"
@@ -137,10 +152,60 @@ async def binance_worker():
                 broadcast()
 
 
+async def refresh_positions_periodic(interval_sec: int = 5):
+    """✅ 주기적으로 REST 스냅샷을 갱신해서 닫힌 포지션 제거"""
+    global last_positions, last_mark_prices
+    while True:
+        try:
+            client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
+            all_positions = await client.futures_position_information()
+            account_info = await client.futures_account()
+            await client.close_connection()
+
+            margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
+            margin_type_map = {p["symbol"]: p.get("marginType") for p in account_info["positions"]}
+
+            # 새로 열린/유지된 포지션만 담을 임시 맵
+            updated = {}
+
+            for pos in all_positions:
+                symbol = pos["symbol"]
+                try:
+                    amt = float(pos.get("positionAmt") or 0)
+                except Exception:
+                    amt = 0.0
+
+                if amt != 0:
+                    norm = normalize_position(pos)
+                    norm["iw"] = margin_map.get(symbol)
+                    norm["mt"] = margin_type_map.get(symbol)
+                    updated[symbol] = norm
+
+            # ✅ 닫힌 포지션 제거 + 상태 업데이트
+            # 삭제 대상: 기존에는 있었는데 updated에는 없는 심볼
+            to_remove = set(last_positions.keys()) - set(updated.keys())
+            for sym in to_remove:
+                last_positions.pop(sym, None)
+                last_mark_prices.pop(sym, None)  # 마크프라이스도 같이 제거
+
+            # 유지/추가 대상 업데이트
+            for sym, norm in updated.items():
+                last_positions[sym] = norm
+
+            broadcast()
+
+        except Exception as e:
+            log.error(f"포지션 갱신 오류: {e}")
+
+        await asyncio.sleep(interval_sec)
+
+
 @router.websocket("/ws/binance")
 async def positions_ws(websocket: WebSocket):
+    global loop
     await websocket.accept()
     active_clients.add(websocket)
+    loop = asyncio.get_running_loop()  # ✅ 웹소켓 연결 시에도 루프 설정 보강
     log.info(f"🌐 Binance 클라이언트 연결됨: {websocket.client}")
 
     if last_positions:
