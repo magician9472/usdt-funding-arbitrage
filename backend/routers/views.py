@@ -33,6 +33,6 @@ async def order_page(request: Request):
 async def positions_page(request: Request):
     return templates.TemplateResponse("positions.html", {"request": request})
 
-@router.get("/binance", response_class=HTMLResponse)
-async def positions_page(request: Request):
+@router.get("/binance_ws", response_class=HTMLResponse)
+async def binance_ws_page(request: Request):
     return templates.TemplateResponse("binance_ws.html", {"request": request})
