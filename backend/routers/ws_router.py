@@ -34,18 +34,17 @@ bitget_ws = (
 )
 
 def broadcast():
-    """포지션 + 마크프라이스 합쳐서 클라이언트에 전송"""
     merged = []
     for symbol, pos in last_positions.items():
         merged.append({
             "symbol": symbol,
             "side": pos.get("holdSide"),
             "size": pos.get("total"),
+            "upl": pos.get("upl"),  # Bitget 제공 UPL
             "entryPrice": pos.get("avgOpenPrice"),
             "markPrice": last_mark_prices.get(symbol, pos.get("markPrice")),
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
-            "upl": pos.get("upl"),
         })
 
     if not merged:
@@ -63,18 +62,29 @@ def on_message(message: str):
         payload = data.get("data", [])
 
         if channel == "positions":
-            # 포지션 업데이트
+            # 현재 포지션 목록 업데이트
+            current_symbols = set()
             last_positions = {}
             for pos in payload:
                 instId = pos["instId"]
                 last_positions[instId] = pos
+                current_symbols.add(instId)
 
-                # 포지션 있는 심볼만 ticker 구독
+                # 새 포지션 심볼이면 ticker 구독
                 if instId not in subscribed_tickers:
                     bitget_ws.subscribe(
                         [SubscribeReq("umcbl", "ticker", instId)], on_message
                     )
                     subscribed_tickers.add(instId)
+
+            # 포지션이 사라진 심볼은 ticker 구독 해제
+            removed = subscribed_tickers - current_symbols
+            for instId in removed:
+                bitget_ws.unsubscribe(
+                    [SubscribeReq("umcbl", "ticker", instId)], on_message
+                )
+                subscribed_tickers.remove(instId)
+                last_mark_prices.pop(instId, None)
 
             broadcast()
 
