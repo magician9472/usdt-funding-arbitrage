@@ -35,11 +35,19 @@
       const sideClass = row.side === "LONG" ? "side-long" : row.side === "SHORT" ? "side-short" : "muted";
       const pnlClass = (row.upl || 0) >= 0 ? "pnl-pos" : "pnl-neg";
 
+      // ✅ 방향 아이콘 추가
+      let sideIcon = "";
+      if (row.side === "LONG") {
+        sideIcon = `<span style="color:green; font-weight:bold; margin-left:4px;">⬆</span>`;
+      } else if (row.side === "SHORT") {
+        sideIcon = `<span style="color:red; font-weight:bold; margin-left:4px;">⬇</span>`;
+      }
+
       return `
         <tr>
           <td><span class="exchange-badge ${exClass}">${row.exchange}</span></td>
           <td>${row.symbol ?? ""}</td>
-          <td class="${sideClass}">${row.side ?? ""}</td>
+          <td class="${sideClass}">${row.side ?? ""} ${sideIcon}</td>
           <td>${fmtNum(row.size, {decimals: 6})}</td>
           <td class="${pnlClass}">${fmtNum(row.upl, {decimals: 6})}</td>
           <td>${fmtNum(row.entryPrice, {decimals: 8})}</td>
