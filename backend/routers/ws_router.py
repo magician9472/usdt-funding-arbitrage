@@ -38,7 +38,7 @@ def broadcast():
     """포지션 + markPrice + 실시간 UPL 합쳐서 브로드캐스트"""
     merged = []
     for pos_symbol, pos in last_positions.items():
-        base_symbol = pos_to_base.get(pos_symbol)  # 매핑된 심볼
+        base_symbol = pos_to_base.get(pos_symbol)
         mark_price = last_mark_prices.get(base_symbol)
 
         # upl 실시간 계산
@@ -60,9 +60,9 @@ def broadcast():
             "symbol": pos_symbol,  # 예: PEPEUSDT_UMCBL
             "side": pos.get("holdSide"),
             "size": pos.get("total"),
-            "upl": upl if upl is not None else pos.get("upl"),  # 실시간 계산값 우선
+            "upl": upl if upl is not None else pos.get("upl"),
             "entryPrice": pos.get("averageOpenPrice"),
-            "markPrice": mark_price,  # ticker 채널에서 받은 markPrice
+            "markPrice": mark_price,
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
         })
@@ -84,13 +84,13 @@ def on_message(message: str):
         # ✅ 포지션 채널
         if channel == "positions":
             current_symbols = set()
-            last_positions = {}
             for pos in payload:
                 instId = pos["instId"]              # 예: "PEPEUSDT_UMCBL"
                 base_symbol = instId.split("_")[0]  # "PEPEUSDT"
 
+                # 포지션 업데이트 (덮어쓰기)
                 last_positions[instId] = pos
-                pos_to_base[instId] = base_symbol   # 매핑 저장
+                pos_to_base[instId] = base_symbol
                 current_symbols.add(instId)
 
                 # 새 심볼이면 ticker 채널 구독
@@ -100,10 +100,12 @@ def on_message(message: str):
                     )
                     subscribed_symbols.add(base_symbol)
 
-            # 포지션이 사라진 심볼은 ticker 구독 해제
-            removed = {pos_to_base[s] for s in pos_to_base if s not in current_symbols}
-            for base_symbol in removed:
-                if base_symbol in subscribed_symbols:
+            # 사라진 포지션만 제거
+            removed = {s for s in list(last_positions) if s not in current_symbols}
+            for instId in removed:
+                base_symbol = pos_to_base.pop(instId, None)
+                last_positions.pop(instId, None)
+                if base_symbol and base_symbol in subscribed_symbols:
                     bitget_ws.unsubscribe(
                         [SubscribeReq("mc", "ticker", base_symbol)], on_message
                     )
