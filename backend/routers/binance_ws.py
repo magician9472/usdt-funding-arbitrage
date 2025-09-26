@@ -42,53 +42,54 @@ def broadcast():
     """포지션 + markPrice + 실시간 UPL 합쳐서 브로드캐스트"""
     merged = []
 
-    for symbol, pos in last_positions.items():
-        mark = last_mark_prices.get(symbol)
-
-        # 안전 변환
-        try:
-            size = float(pos.get("pa") or 0)
-        except Exception:
-            size = 0.0
-
-        try:
-            entry = float(pos.get("ep") or 0)
-        except Exception:
-            entry = 0.0
-
-        upl = pos.get("up")
-
-        # 방향
-        if size > 0:
-            side = "LONG"
-        elif size < 0:
-            side = "SHORT"
-        else:
-            side = "FLAT"
-
-        # UPL 재계산
-        try:
-            if mark is not None and entry != 0 and size != 0:
-                m = float(mark)
-                upl = (m - entry) * size if size > 0 else (entry - m) * abs(size)
-        except Exception as e:
-            log.error(f"Binance UPL 계산 오류: {e}")
-
-        merged.append({
-            "exchange": "binance",
-            "symbol": symbol,         # 예: PEPEUSDT
-            "side": side,
-            "size": size,
-            "upl": upl,
-            "entryPrice": entry,
-            "markPrice": mark,
-            "liqPrice": pos.get("l"),
-            "margin": pos.get("iw"),
-            "marginType": pos.get("mt"),
-        })
-
-    if not merged:
+    # last_positions 이 비어있으면 바로 메시지 반환
+    if not last_positions:
         merged = [{"msg": "현재 열린 포지션이 없습니다."}]
+    else:
+        for symbol, pos in last_positions.items():
+            mark = last_mark_prices.get(symbol)
+
+            # 안전 변환
+            try:
+                size = float(pos.get("pa") or 0)
+            except Exception:
+                size = 0.0
+
+            try:
+                entry = float(pos.get("ep") or 0)
+            except Exception:
+                entry = 0.0
+
+            upl = pos.get("up")
+
+            # 방향
+            if size > 0:
+                side = "LONG"
+            elif size < 0:
+                side = "SHORT"
+            else:
+                side = "FLAT"
+
+            # UPL 재계산
+            try:
+                if mark is not None and entry != 0 and size != 0:
+                    m = float(mark)
+                    upl = (m - entry) * size if size > 0 else (entry - m) * abs(size)
+            except Exception as e:
+                log.error(f"Binance UPL 계산 오류: {e}")
+
+            merged.append({
+                "exchange": "binance",
+                "symbol": symbol,
+                "side": side,
+                "size": size,
+                "upl": upl,
+                "entryPrice": entry,
+                "markPrice": mark,
+                "liqPrice": pos.get("l"),
+                "margin": pos.get("iw"),
+                "marginType": pos.get("mt"),
+            })
 
     if loop is None:
         log.warning("이벤트 루프가 설정되지 않았습니다. WebSocket 전송에 실패할 수 있습니다.")
@@ -99,11 +100,13 @@ def broadcast():
         except Exception as e:
             log.error(f"웹소켓 전송 실패: {e}")
 
-            
+    # ✅ 통합 브로드캐스트도 호출
     try:
+        from backend.routers import unified_ws
         unified_ws.broadcast()
-    except Exception as e:
-        log.error(f"통합 브로드캐스트 호출 실패: {e}")
+    except Exception:
+        pass
+
 
 
 
