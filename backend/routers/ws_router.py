@@ -81,7 +81,7 @@ def on_message(message: str):
             removed = subscribed_tickers - current_symbols
             for instId in removed:
                 bitget_ws.unsubscribe(
-                    [SubscribeReq("umcbl", "ticker", instId)], on_message
+                    [SubscribeReq("mc", "ticker", instId)], on_message
                 )
                 subscribed_tickers.remove(instId)
                 last_mark_prices.pop(instId, None)
