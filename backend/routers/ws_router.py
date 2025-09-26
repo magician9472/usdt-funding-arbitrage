@@ -35,17 +35,34 @@ bitget_ws = (
 )
 
 def broadcast():
-    """포지션 + markPrice 합쳐서 브로드캐스트"""
+    """포지션 + markPrice + 실시간 UPL 합쳐서 브로드캐스트"""
     merged = []
     for pos_symbol, pos in last_positions.items():
         base_symbol = pos_to_base.get(pos_symbol)  # 매핑된 심볼
+        mark_price = last_mark_prices.get(base_symbol)
+
+        # upl 실시간 계산
+        upl = None
+        try:
+            entry = float(pos.get("averageOpenPrice", 0))
+            size = float(pos.get("total", 0))
+            side = pos.get("holdSide")
+            if mark_price and entry and size:
+                mark = float(mark_price)
+                if side == "long":
+                    upl = (mark - entry) * size
+                elif side == "short":
+                    upl = (entry - mark) * size
+        except Exception as e:
+            log.error(f"UPL 계산 오류: {e}")
+
         merged.append({
             "symbol": pos_symbol,  # 예: PEPEUSDT_UMCBL
             "side": pos.get("holdSide"),
             "size": pos.get("total"),
-            "upl": pos.get("upl"),
+            "upl": upl if upl is not None else pos.get("upl"),  # 실시간 계산값 우선
             "entryPrice": pos.get("averageOpenPrice"),
-            "markPrice": last_mark_prices.get(base_symbol),  # ticker 채널에서 받은 markPrice
+            "markPrice": mark_price,  # ticker 채널에서 받은 markPrice
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
         })
