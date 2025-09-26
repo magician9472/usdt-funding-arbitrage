@@ -8,10 +8,10 @@ active_clients = set()
 loop = None
 last_positions = {}
 last_mark_prices = {}
-pos_to_base = {}            # 포지션 심볼 → markPrice 심볼 매핑
-subscribed_symbols = set()  # markPrice 채널에 구독한 심볼(PEPEUSDT 등)
+pos_to_base = {}            # 포지션 심볼 → ticker 심볼 매핑
+subscribed_symbols = set()  # ticker 채널에 구독한 심볼(PEPEUSDT 등)
 
-log = logging.getLogger("positions-markprice")
+log = logging.getLogger("positions-ticker")
 
 # .env 로드
 load_dotenv()
@@ -45,7 +45,7 @@ def broadcast():
             "size": pos.get("total"),
             "upl": pos.get("upl"),
             "entryPrice": pos.get("avgOpenPrice"),
-            "markPrice": last_mark_prices.get(base_symbol),  # 매핑된 심볼 기준
+            "markPrice": last_mark_prices.get(base_symbol),  # ticker 채널에서 받은 markPrice
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
         })
@@ -76,27 +76,27 @@ def on_message(message: str):
                 pos_to_base[instId] = base_symbol   # 매핑 저장
                 current_symbols.add(instId)
 
-                # 새 심볼이면 markPrice 채널 구독
+                # 새 심볼이면 ticker 채널 구독
                 if base_symbol not in subscribed_symbols:
                     bitget_ws.subscribe(
-                        [SubscribeReq("mc", "markPrice", base_symbol)], on_message
+                        [SubscribeReq("mc", "ticker", base_symbol)], on_message
                     )
                     subscribed_symbols.add(base_symbol)
 
-            # 포지션이 사라진 심볼은 markPrice 구독 해제
+            # 포지션이 사라진 심볼은 ticker 구독 해제
             removed = {pos_to_base[s] for s in pos_to_base if s not in current_symbols}
             for base_symbol in removed:
                 if base_symbol in subscribed_symbols:
                     bitget_ws.unsubscribe(
-                        [SubscribeReq("mc", "markPrice", base_symbol)], on_message
+                        [SubscribeReq("mc", "ticker", base_symbol)], on_message
                     )
                     subscribed_symbols.remove(base_symbol)
                     last_mark_prices.pop(base_symbol, None)
 
             broadcast()
 
-        # ✅ markPrice 채널
-        elif channel == "markPrice":
+        # ✅ ticker 채널 (markPrice 포함)
+        elif channel == "ticker":
             for t in payload:
                 instId = t["instId"]  # 예: "PEPEUSDT"
                 last_mark_prices[instId] = t.get("markPrice")
