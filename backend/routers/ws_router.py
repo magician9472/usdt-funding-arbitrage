@@ -1,13 +1,14 @@
 import os, json, asyncio, logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
-from pybitget.stream import BitgetWsClient, handel_error
+from pybitget.stream import BitgetWsClient, handel_error, SubscribeReq
 
 router = APIRouter()
 active_clients = set()
 loop = None
 last_positions = {}
 last_mark_prices = {}
+subscribed_tickers = set()
 
 log = logging.getLogger("positions-sub")
 
@@ -40,11 +41,11 @@ def broadcast():
             "symbol": symbol,
             "side": pos.get("holdSide"),
             "size": pos.get("total"),
-            "entryPrice": pos.get("avgOpenPrice"),   # Bitget 문서상 필드명
+            "entryPrice": pos.get("avgOpenPrice"),
             "markPrice": last_mark_prices.get(symbol, pos.get("markPrice")),
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
-            "upl": pos.get("upl"),                  # Bitget 제공 미실현 손익
+            "upl": pos.get("upl"),
         })
 
     if not merged:
@@ -54,7 +55,7 @@ def broadcast():
         asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
 
 def on_message(message: str):
-    global last_positions, last_mark_prices
+    global last_positions, last_mark_prices, subscribed_tickers
     try:
         data = json.loads(message)
         arg = data.get("arg", {})
@@ -62,11 +63,19 @@ def on_message(message: str):
         payload = data.get("data", [])
 
         if channel == "positions":
-            if not payload:
-                last_positions = {}
-            else:
-                for pos in payload:
-                    last_positions[pos["instId"]] = pos
+            # 포지션 업데이트
+            last_positions = {}
+            for pos in payload:
+                instId = pos["instId"]
+                last_positions[instId] = pos
+
+                # 포지션 있는 심볼만 ticker 구독
+                if instId not in subscribed_tickers:
+                    bitget_ws.subscribe(
+                        [SubscribeReq("umcbl", "ticker", instId)], on_message
+                    )
+                    subscribed_tickers.add(instId)
+
             broadcast()
 
         elif channel == "ticker":
@@ -83,7 +92,6 @@ async def positions_ws(websocket: WebSocket):
     active_clients.add(websocket)
     log.info(f"🌐 클라이언트 연결됨: {websocket.client}")
 
-    # 새 연결 시 마지막 상태 전송
     if last_positions:
         broadcast()
 

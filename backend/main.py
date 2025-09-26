@@ -14,13 +14,12 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     ws_router.loop = loop
 
-    # 여러 채널 동시에 구독
+    # 처음에는 positions 채널만 구독
     channels = [
         SubscribeReq("umcbl", "positions", "default"),
-        SubscribeReq("umcbl", "ticker", "default"),
     ]
     ws_router.bitget_ws.subscribe(channels, ws_router.on_message)
-    print("🚀 Bitget positions + markPrice 구독 시작")
+    print("🚀 Bitget positions 구독 시작")
 
     asyncio.create_task(update_loop())
     yield
