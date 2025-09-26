@@ -32,7 +32,8 @@ def normalize_position(pos: dict):
         "ps": pos.get("positionSide"),
         "mt": pos.get("marginType"),
         "l": pos.get("liquidationPrice"),
-        "im": pos.get("isolatedMargin"),  # margin 금액
+        # margin 금액은 따로 붙여줌
+        "im": pos.get("isolatedMargin"),
     }
 
 
@@ -75,29 +76,31 @@ def broadcast():
 
 
 async def refresh_margin():
-    """REST API로 margin 갱신"""
-    try:
-        client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
-        account_info = await client.futures_account()
-        await client.close_connection()
-        margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
-        for sym, pos in last_positions.items():
-            if sym in margin_map:
-                pos["im"] = margin_map[sym]
-        broadcast()
-    except Exception as e:
-        log.error(f"margin 갱신 오류: {e}")
+    """주기적으로 margin 갱신"""
+    while True:
+        try:
+            client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
+            account_info = await client.futures_account()
+            await client.close_connection()
+            margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
+            for sym, pos in last_positions.items():
+                if sym in margin_map:
+                    pos["im"] = margin_map[sym]
+            broadcast()
+        except Exception as e:
+            log.error(f"margin 갱신 오류: {e}")
+        await asyncio.sleep(60)  # 1분마다 갱신
 
 
 async def binance_worker():
-    """Binance 포지션 + markPrice + 포지션 이벤트 기반 margin 갱신"""
+    """Binance 포지션 + markPrice 실시간 업데이트"""
     global TARGET_SYMBOL
 
     client = await AsyncClient.create(BINANCE_KEY, BINANCE_SECRET)
 
     # ✅ 스냅샷: 열린 포지션 하나만 선택
     all_positions = await client.futures_position_information()
-    account_info = await client.futures_account()
+    account_info = await client.futures_account()   # margin 포함
     await client.close_connection()
 
     margin_map = {p["symbol"]: p.get("isolatedMargin") for p in account_info["positions"]}
@@ -115,37 +118,21 @@ async def binance_worker():
         log.info("열린 포지션이 없습니다.")
         return
 
-    # ✅ User Data Stream (포지션 이벤트 감지 → margin 갱신)
-    listen_key = await client.futures_stream_get_listen_key()
-    url_user = f"wss://fstream.binance.com/ws/{listen_key}"
+    # ✅ margin 주기적 갱신 태스크 실행
+    asyncio.create_task(refresh_margin())
 
-    async def user_stream():
-        async with websockets.connect(url_user, ping_interval=20, ping_timeout=20) as ws:
-            log.info("User Data Stream 연결됨")
-            while True:
-                raw = await ws.recv()
-                data = json.loads(raw)
-                if data.get("e") == "ACCOUNT_UPDATE":
-                    log.info("포지션 이벤트 감지 → margin 갱신")
-                    await refresh_margin()
-
-    # ✅ markPrice 스트림
-    url_mark = "wss://fstream.binance.com/ws/!markPrice@arr@1s"
-
-    async def mark_stream():
-        async with websockets.connect(url_mark, ping_interval=20, ping_timeout=20) as ws:
-            log.info(f"실시간 markPrice 수신 시작: {TARGET_SYMBOL}")
-            while True:
-                raw = await ws.recv()
-                data = json.loads(raw)
-                if isinstance(data, list):
-                    for item in data:
-                        if item.get("e") == "markPriceUpdate" and item.get("s") == TARGET_SYMBOL:
-                            last_mark_prices[item["s"]] = item["p"]
-                            broadcast()
-
-    # ✅ 두 스트림 동시에 실행
-    await asyncio.gather(user_stream(), mark_stream())
+    # ✅ 실시간 markPrice 스트림 (전체 스트림에서 해당 심볼만 필터링)
+    url = "wss://fstream.binance.com/ws/!markPrice@arr@1s"
+    async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
+        log.info(f"실시간 markPrice 수신 시작: {TARGET_SYMBOL}")
+        while True:
+            raw = await ws.recv()
+            data = json.loads(raw)
+            if isinstance(data, list):
+                for item in data:
+                    if item.get("e") == "markPriceUpdate" and item.get("s") == TARGET_SYMBOL:
+                        last_mark_prices[item["s"]] = item["p"]
+                        broadcast()
 
 
 @router.websocket("/ws/binance")
