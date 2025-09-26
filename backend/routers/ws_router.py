@@ -44,7 +44,7 @@ def broadcast():
             "side": pos.get("holdSide"),
             "size": pos.get("total"),
             "upl": pos.get("upl"),
-            "entryPrice": pos.get("avgOpenPrice"),
+            "entryPrice": pos.get("averageOpenPrice"),
             "markPrice": last_mark_prices.get(base_symbol),  # ticker 채널에서 받은 markPrice
             "liqPrice": pos.get("liqPx"),
             "margin": pos.get("margin"),
