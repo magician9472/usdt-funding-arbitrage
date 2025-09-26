@@ -6,6 +6,7 @@ from pybitget.stream import BitgetWsClient, handel_error
 router = APIRouter()
 active_clients = set()
 loop = None
+last_positions = None  # 마지막 포지션 상태 저장
 
 log = logging.getLogger("positions-sub")
 
@@ -32,26 +33,23 @@ bitget_ws = (
 
 # 메시지 콜백
 def on_message(message: str):
+    global last_positions
     log.info("📩 on_message 호출됨")
     try:
         data = json.loads(message)
         if data.get("arg", {}).get("channel") == "positions":
             payload = data.get("data", [])
             if not payload:
-                for ws in list(active_clients):
-                    try:
-                        asyncio.run_coroutine_threadsafe(
-                            ws.send_json({"msg": "현재 열린 포지션이 없습니다."}), loop
-                        )
-                    except Exception as e:
-                        log.error(f"❌ send_json error (no position): {e}")
-                        active_clients.discard(ws)
-                return
+                last_positions = {"msg": "현재 열린 포지션이 없습니다."}
+            else:
+                last_positions = payload
+
+            # 연결된 모든 클라이언트에 브로드캐스트
             for ws in list(active_clients):
                 try:
-                    asyncio.run_coroutine_threadsafe(ws.send_json(payload), loop)
+                    asyncio.run_coroutine_threadsafe(ws.send_json(last_positions), loop)
                 except Exception as e:
-                    log.error(f"❌ send_json error (with data): {e}")
+                    log.error(f"❌ send_json error: {e}")
                     active_clients.discard(ws)
     except Exception as e:
         log.error(f"메시지 파싱 오류: {e}", exc_info=True)
@@ -62,6 +60,11 @@ async def positions_ws(websocket: WebSocket):
     await websocket.accept()
     active_clients.add(websocket)
     log.info(f"🌐 클라이언트 연결됨: {websocket.client}")
+
+    # 새로 연결된 클라이언트에 마지막 상태 즉시 전송
+    if last_positions is not None:
+        await websocket.send_json(last_positions)
+
     try:
         while True:
             await asyncio.sleep(10)
