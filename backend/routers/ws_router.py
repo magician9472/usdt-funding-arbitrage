@@ -6,7 +6,8 @@ from pybitget.stream import BitgetWsClient, handel_error
 router = APIRouter()
 active_clients = set()
 loop = None
-last_positions = None  # 마지막 포지션 상태 저장
+last_positions = {}     # 심볼별 포지션 상태
+last_mark_prices = {}   # 심볼별 최신 마크프라이스
 
 log = logging.getLogger("positions-sub")
 
@@ -19,7 +20,7 @@ API_PASS = os.getenv("BITGET_API_PASS")
 if not all([API_KEY, API_SECRET, API_PASS]):
     raise RuntimeError("환경변수 BITGET_API_KEY, BITGET_API_SECRET, BITGET_API_PASS 를 설정하세요.")
 
-# Bitget WebSocket 클라이언트 (인증 포함)
+# Bitget WebSocket 클라이언트
 bitget_ws = (
     BitgetWsClient(
         api_key=API_KEY,
@@ -31,47 +32,79 @@ bitget_ws = (
     .build()
 )
 
-# 메시지 콜백
+def calc_pnl(entry, mark, size, side):
+    """실시간 PNL 계산"""
+    try:
+        entry, mark, size = float(entry), float(mark), float(size)
+    except (TypeError, ValueError):
+        return None
+    if side == "long":
+        return (mark - entry) * size
+    elif side == "short":
+        return (entry - mark) * size
+    return None
+
+def broadcast():
+    """포지션 + 마크프라이스 합쳐서 클라이언트에 전송"""
+    merged = []
+    for symbol, pos in last_positions.items():
+        entry = pos.get("avgEntryPrice")
+        size = pos.get("total")
+        side = pos.get("holdSide")
+        mark = last_mark_prices.get(symbol, pos.get("markPrice"))
+
+        pnl = calc_pnl(entry, mark, size, side)
+
+        merged.append({
+            "symbol": symbol,
+            "side": side,
+            "size": size,
+            "entryPrice": entry,
+            "markPrice": mark,
+            "liqPrice": pos.get("liqPx"),
+            "margin": pos.get("margin"),
+            "pnl": pnl,
+        })
+
+    if not merged:
+        merged = {"msg": "현재 열린 포지션이 없습니다."}
+
+    for ws in list(active_clients):
+        asyncio.run_coroutine_threadsafe(ws.send_json(merged), loop)
+
 def on_message(message: str):
-    global last_positions
+    global last_positions, last_mark_prices
     try:
         data = json.loads(message)
-        if data.get("arg", {}).get("channel") == "positions":
-            payload = data.get("data", [])
-            if not payload:
-                last_positions = {"msg": "현재 열린 포지션이 없습니다."}
-            else:
-                # 필요한 필드만 추려서 가공
-                formatted = []
-                for pos in payload:
-                    formatted.append({
-                        "symbol": pos.get("instId"),
-                        "side": pos.get("holdSide"),
-                        "size": pos.get("total"),
-                        "entryPrice": pos.get("avgEntryPrice"),
-                        "markPrice": pos.get("markPrice"),
-                        "liqPrice": pos.get("liqPx"),
-                        "margin": pos.get("margin"),
-                        "pnl": pos.get("upl"),
-                    })
-                last_positions = formatted
+        arg = data.get("arg", {})
+        channel = arg.get("channel")
+        payload = data.get("data", [])
 
-            # 모든 클라이언트에 전송
-            for ws in list(active_clients):
-                asyncio.run_coroutine_threadsafe(ws.send_json(last_positions), loop)
+        if channel == "positions":
+            if not payload:
+                last_positions = {}
+            else:
+                for pos in payload:
+                    last_positions[pos["instId"]] = pos
+            broadcast()
+
+        elif channel == "markPrice":
+            for mp in payload:
+                last_mark_prices[mp["instId"]] = mp["markPrice"]
+            broadcast()
+
     except Exception as e:
         log.error(f"메시지 파싱 오류: {e}", exc_info=True)
 
-# 클라이언트 WebSocket 엔드포인트
 @router.websocket("/ws/positions")
 async def positions_ws(websocket: WebSocket):
     await websocket.accept()
     active_clients.add(websocket)
     log.info(f"🌐 클라이언트 연결됨: {websocket.client}")
 
-    # 새로 연결된 클라이언트에 마지막 상태 즉시 전송
-    if last_positions is not None:
-        await websocket.send_json(last_positions)
+    # 새 연결 시 마지막 상태 전송
+    if last_positions:
+        broadcast()
 
     try:
         while True:

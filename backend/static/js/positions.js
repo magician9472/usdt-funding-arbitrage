@@ -10,25 +10,26 @@ ws.onmessage = (event) => {
   body.innerHTML = "";
 
   let data = JSON.parse(event.data);
-
   if (data.msg) {
     body.innerHTML = `<tr><td colspan="8" style="text-align:center; color:gray;">${data.msg}</td></tr>`;
     return;
   }
-
   if (!Array.isArray(data)) data = [data];
 
   data.forEach(pos => {
     const row = document.createElement("tr");
+    const pnl = parseFloat(pos.pnl);
+    const pnlColor = isNaN(pnl) ? "black" : (pnl >= 0 ? "green" : "red");
+
     row.innerHTML = `
       <td>${pos.symbol}</td>
-      <td class="${pos.side === "long" ? "long" : "short"}">${pos.side.toUpperCase()}</td>
+      <td class="${pos.side === "long" ? "long" : "short"}">${pos.side?.toUpperCase()}</td>
       <td>${pos.size}</td>
+      <td style="color:${pnlColor};">${pnl?.toFixed(4)}</td>
       <td>${pos.entryPrice}</td>
       <td>${pos.markPrice}</td>
       <td>${pos.liqPrice}</td>
       <td>${pos.margin}</td>
-      <td>${pos.pnl}</td>
     `;
     body.appendChild(row);
   });
