@@ -34,7 +34,6 @@ bitget_ws = (
 # 메시지 콜백
 def on_message(message: str):
     global last_positions
-    log.info("📩 on_message 호출됨")
     try:
         data = json.loads(message)
         if data.get("arg", {}).get("channel") == "positions":
@@ -42,15 +41,24 @@ def on_message(message: str):
             if not payload:
                 last_positions = {"msg": "현재 열린 포지션이 없습니다."}
             else:
-                last_positions = payload
+                # 필요한 필드만 추려서 가공
+                formatted = []
+                for pos in payload:
+                    formatted.append({
+                        "symbol": pos.get("instId"),
+                        "side": pos.get("holdSide"),
+                        "size": pos.get("total"),
+                        "entryPrice": pos.get("avgEntryPrice"),
+                        "markPrice": pos.get("markPrice"),
+                        "liqPrice": pos.get("liqPx"),
+                        "margin": pos.get("margin"),
+                        "pnl": pos.get("upl"),
+                    })
+                last_positions = formatted
 
-            # 연결된 모든 클라이언트에 브로드캐스트
+            # 모든 클라이언트에 전송
             for ws in list(active_clients):
-                try:
-                    asyncio.run_coroutine_threadsafe(ws.send_json(last_positions), loop)
-                except Exception as e:
-                    log.error(f"❌ send_json error: {e}")
-                    active_clients.discard(ws)
+                asyncio.run_coroutine_threadsafe(ws.send_json(last_positions), loop)
     except Exception as e:
         log.error(f"메시지 파싱 오류: {e}", exc_info=True)
 

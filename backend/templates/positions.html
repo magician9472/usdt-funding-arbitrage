@@ -1,13 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <title>포지션 추적</title>
+  <meta charset="UTF-8">
+  <title>내 포지션</title>
   <link rel="stylesheet" href="/static/css/positions.css">
 </head>
 <body>
-  <h1>내 포지션</h1>
-  <ul id="positions"></ul>
+  <h1>내 포지션 현황</h1>
+  <div id="status">⏳ WebSocket 연결 중...</div>
+  <table id="positions-table">
+    <thead>
+      <tr>
+        <th>심볼</th>
+        <th>방향</th>
+        <th>Size</th>
+        <th>Entry Price</th>
+        <th>Mark Price</th>
+        <th>Liq. Price</th>
+        <th>Margin</th>
+        <th>PNL</th>
+      </tr>
+    </thead>
+    <tbody id="positions-body">
+      <tr><td colspan="8" style="text-align:center;">데이터 없음</td></tr>
+    </tbody>
+  </table>
   <script src="/static/js/positions.js"></script>
 </body>
 </html>

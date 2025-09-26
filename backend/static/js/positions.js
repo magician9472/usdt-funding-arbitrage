@@ -2,51 +2,42 @@ const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
 const ws = new WebSocket(protocol + window.location.host + "/ws/positions");
 
 ws.onopen = () => {
-  console.log("✅ WebSocket 연결 성공");
-  const li = document.createElement("li");
-  li.innerText = "✅ WebSocket 연결 성공";
-  li.style.color = "blue";
-  document.getElementById("positions").appendChild(li);
+  document.getElementById("status").innerText = "✅ WebSocket 연결 성공";
 };
 
 ws.onmessage = (event) => {
-  console.log("FROM SERVER >>>", event.data);
+  const body = document.getElementById("positions-body");
+  body.innerHTML = "";
 
-  let data;
-  try {
-    data = JSON.parse(event.data);
-  } catch (e) {
-    console.error("❌ JSON 파싱 오류:", e);
-    return;
-  }
+  let data = JSON.parse(event.data);
 
-  const list = document.getElementById("positions");
-  list.innerHTML = "";
-
-  // 포지션 없음 메시지 처리
   if (data.msg) {
-    const li = document.createElement("li");
-    li.innerText = data.msg;
-    li.style.color = "gray";
-    list.appendChild(li);
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center; color:gray;">${data.msg}</td></tr>`;
     return;
   }
 
-  // 배열/단일 객체 모두 대응
   if (!Array.isArray(data)) data = [data];
 
   data.forEach(pos => {
-    const li = document.createElement("li");
-    li.style.color = pos.holdSide === "long" ? "green" : "red";
-    li.innerText = `${pos.instId} | ${pos.holdSide?.toUpperCase()} | 수량: ${pos.total}`;
-    list.appendChild(li);
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${pos.symbol}</td>
+      <td class="${pos.side === "long" ? "long" : "short"}">${pos.side.toUpperCase()}</td>
+      <td>${pos.size}</td>
+      <td>${pos.entryPrice}</td>
+      <td>${pos.markPrice}</td>
+      <td>${pos.liqPrice}</td>
+      <td>${pos.margin}</td>
+      <td>${pos.pnl}</td>
+    `;
+    body.appendChild(row);
   });
 };
 
-ws.onerror = (err) => {
-  console.error("❌ WebSocket 에러:", err);
+ws.onerror = () => {
+  document.getElementById("status").innerText = "❌ WebSocket 에러 발생";
 };
 
 ws.onclose = () => {
-  console.log("❌ WebSocket 연결 종료");
+  document.getElementById("status").innerText = "❌ WebSocket 연결 종료";
 };
