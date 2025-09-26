@@ -1,6 +1,9 @@
 import json, asyncio, logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pybitget.stream import BitgetWsClient, SubscribeReq, handel_error
+import os
+from dotenv import load_dotenv
+from pybitget.stream import BitgetWsClient, handel_error
 
 router = APIRouter()
 active_clients = set()
@@ -8,9 +11,20 @@ loop = None
 
 log = logging.getLogger("positions-sub")
 
-# Bitget WebSocket 클라이언트 (main.py에서 subscribe 실행)
+
+
+load_dotenv()
+API_KEY = os.getenv("BITGET_API_KEY")
+API_SECRET = os.getenv("BITGET_API_SECRET")
+API_PASS = os.getenv("BITGET_API_PASS")
+
 bitget_ws = (
-    BitgetWsClient(verbose=True)
+    BitgetWsClient(
+        api_key=API_KEY,
+        api_secret=API_SECRET,
+        passphrase=API_PASS,
+        verbose=True,
+    )
     .error_listener(handel_error)
     .build()
 )
